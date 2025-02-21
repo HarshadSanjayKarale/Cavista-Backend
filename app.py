@@ -185,4 +185,4 @@ def check_if_token_in_blacklist(jwt_header, jwt_payload):
     return blacklist_collection.find_one({'jti': jti}) is not None
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
