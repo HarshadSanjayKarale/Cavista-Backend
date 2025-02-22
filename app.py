@@ -508,6 +508,19 @@ def get_doctor_notifications(doctor_id):
         notifications = list(notifications_collection.find({"doctor_id": ObjectId(doctor_id)}))
         for notification in notifications:
             notification['_id'] = str(notification['_id'])
+            user_id = notification.get('patient_id')
+            if user_id:
+                user = users_collection.find_one({"_id": ObjectId(user_id)})
+                if user:
+                    notification['patient_name'] = user.get('username')
+                    notification['patient_mobile'] = user.get('mobno')
+                    notification['date'] = notification['created_at'].strftime('%Y-%m-%d')
+                    notification['time'] = notification['created_at'].strftime('%H:%M:%S')
+                    notification['message'] = notification.get('message')
+                    notification['patient_id'] = str(notification['patient_id'])  # Convert ObjectId to string
+                    notification['doctor_id'] = str(notification['doctor_id'])  # Convert ObjectId to string
+                    notification['created_at'] = notification['created_at'].isoformat()  # Convert datetime to ISO format string
+                    notification['updated_at'] = notification['updated_at'].isoformat()  # Convert datetime to ISO format string
         return jsonify({"status": "success", "notifications": notifications}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
