@@ -9,6 +9,7 @@ from bson import ObjectId
 import joblib
 import numpy as np
 import sklearn
+from models import Comment, Reply
 
 # Load environment variables
 load_dotenv()
@@ -28,6 +29,7 @@ db = client['auth_db']
 users_collection = db['users']
 blacklist_collection = db['token_blacklist']
 posts_collection = db['posts']
+comments_collection = db['comments']
 
 
 model = joblib.load('health_prediction_model.pkl')
@@ -313,6 +315,54 @@ def get_all_posts():
         for post in posts:
             post['_id'] = str(post['_id'])
         return jsonify(posts), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+
+# Add this to the routes section
+@app.route('/api/comments', methods=['POST'])
+@jwt_required()
+def add_comment():
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+
+        new_comment = {
+            'post_id': data['post_id'],
+            'user_id': current_user_id,
+            'username': data['username'],
+            'content': data['content'],
+            'replies': [],
+            'created_at': datetime.utcnow()
+        }
+
+        result = comments_collection.insert_one(new_comment)
+        return jsonify({'message': 'Comment added successfully', 'comment_id': str(result.inserted_id)}), 201
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/<comment_id>/reply', methods=['POST'])
+@jwt_required()
+def reply_to_comment(comment_id):
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+
+        reply = {
+            'user_id': current_user_id,
+            'username': data['username'],
+            'content': data['content'],
+            'created_at': datetime.utcnow()
+        }
+
+        comments_collection.update_one(
+            {'_id': ObjectId(comment_id)},
+            {'$push': {'replies': reply}}
+        )
+
+        return jsonify({'message': 'Reply added successfully'}), 201
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
