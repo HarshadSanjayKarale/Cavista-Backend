@@ -17,42 +17,6 @@ load_dotenv()
 
 app = Flask(__name__)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def load_ml_models():
-    try:
-        # Get the directory containing app.py
-        base_dir = Path(__file__).resolve().parent
-        
-        # Construct paths to model files
-        model_path = base_dir / 'health_prediction_model.pkl'
-        scaler_path = base_dir / 'scaler.pkl'
-        
-        # Check if files exist
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found at {model_path}")
-        if not scaler_path.exists():
-            raise FileNotFoundError(f"Scaler file not found at {scaler_path}")
-            
-        # Load the models
-        model = joblib.load(model_path)
-        scaler = joblib.load(scaler_path)
-        
-        logger.info("ML models loaded successfully")
-        return model, scaler
-        
-    except Exception as e:
-        logger.error(f"Error loading ML models: {str(e)}")
-        raise RuntimeError(f"Failed to load ML models: {str(e)}")
-
-# Initialize the models
-try:
-    model, scaler = load_ml_models()
-except Exception as e:
-    logger.critical("Failed to initialize ML models. Application cannot start.")
-    model = None
-    scaler = None
 
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
@@ -68,9 +32,6 @@ posts_collection = db['posts']
 comments_collection = db['comments']
 notifications_collection = db['notifications']
 
-
-joblib.dump(model, 'health_prediction_model.pkl', protocol=4)
-joblib.dump(scaler, 'scaler.pkl', protocol=4)
 
 def is_valid_email(email):
     import re
