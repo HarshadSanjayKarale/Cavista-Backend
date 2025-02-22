@@ -143,7 +143,9 @@ def login():
             'user': {
                 'id': str(user['_id']),
                 'email': user['email'],
-                'username': user['username']
+                'username': user['username'],
+                'mobno': user['mobno'],
+                'role': user['role']
             }
         }), 200
         
