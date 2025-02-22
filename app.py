@@ -19,10 +19,14 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 jwt = JWTManager(app)
 
 # MongoDB Configuration
+# MongoDB Configuration
 client = MongoClient(os.getenv('MONGODB_URI', 'mongodb://localhost:27017/'))
 db = client['auth_db']
 users_collection = db['users']
 blacklist_collection = db['token_blacklist']
+posts_collection = db['posts']
+
+# Add the new routes here
 
 # Helper function to validate email format
 def is_valid_email(email):
@@ -223,12 +227,88 @@ def get_user_by_id(user_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
 
 # Token blacklist checker
 @jwt.token_in_blocklist_loader
 def check_if_token_in_blacklist(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
     return blacklist_collection.find_one({'jti': jti}) is not None
+
+
+#Post API Started here
+@app.route('/api/posts', methods=['POST'])
+@jwt_required()
+def add_post():
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+
+        new_post = {
+            'content': data['content'],
+            'authorId': current_user_id,
+            'authorName': data['authorName'],
+            'images': data.get('images', []),
+            'comments': [],
+            'verifiedCount': 0,
+            'verifiedBy': [],
+            'createdAt': datetime.utcnow()
+        }
+
+        result = posts_collection.insert_one(new_post)
+        return jsonify({'message': 'Post added successfully', 'post_id': str(result.inserted_id)}), 201
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/posts/<post_id>', methods=['PUT'])
+@jwt_required()
+def edit_post(post_id):
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        post = posts_collection.find_one({'_id': ObjectId(post_id)})
+        if post['authorId'] != current_user_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        posts_collection.update_one(
+            {'_id': ObjectId(post_id)},
+            {'$set': {'content': data['content'], 'images': data.get('images', post['images'])}}
+        )
+        
+        return jsonify({'message': 'Post updated successfully'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/posts/<post_id>', methods=['DELETE'])
+@jwt_required()
+def delete_post(post_id):
+    try:
+        current_user_id = get_jwt_identity()
+        
+        post = posts_collection.find_one({'_id': ObjectId(post_id)})
+        if post['authorId'] != current_user_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        posts_collection.delete_one({'_id': ObjectId(post_id)})
+        return jsonify({'message': 'Post deleted successfully'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/posts', methods=['GET'])
+@jwt_required()
+def get_all_posts():
+    try:
+        posts = list(posts_collection.find())
+        for post in posts:
+            post['_id'] = str(post['_id'])
+        return jsonify(posts), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
