@@ -321,6 +321,8 @@ def get_all_posts():
     
 
 # Add this to the routes section
+from bson import ObjectId
+
 @app.route('/api/comments', methods=['POST'])
 @jwt_required()
 def add_comment():
@@ -366,6 +368,51 @@ def reply_to_comment(comment_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/<post_id>', methods=['GET'])
+def get_comments(post_id):
+    try:
+        # Find all comments for the given post_id
+        comments = list(comments_collection.find({'post_id': post_id}))
+        
+        # Format the response
+        formatted_comments = []
+        for comment in comments:
+            formatted_comment = {
+                'id': str(comment['_id']),
+                'post_id': comment['post_id'],
+                'user_id': comment['user_id'],
+                'username': comment['username'],
+                'content': comment['content'],
+                'created_at': comment['created_at'].isoformat() if 'created_at' in comment else None,
+                'replies': []
+            }
+            
+            # Format replies if they exist
+            if 'replies' in comment and comment['replies']:
+                for reply in comment['replies']:
+                    formatted_reply = {
+                        'user_id': reply['user_id'],
+                        'username': reply['username'],
+                        'content': reply['content'],
+                        'created_at': reply['created_at'].isoformat() if 'created_at' in reply else None
+                    }
+                    formatted_comment['replies'].append(formatted_reply)
+            
+            formatted_comments.append(formatted_comment)
+        
+        return jsonify({
+            'success': True,
+            'comments': formatted_comments,
+            'total_comments': len(formatted_comments)
+        }), 200
+
+    except Exception as e:
+        print(f"Error in get_comments: {str(e)}")  # For debugging
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
     
 
 #Model API will come here
