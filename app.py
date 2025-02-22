@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,render_template
 from flask_jwt_extended import JWTManager, create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,6 +6,9 @@ from datetime import timedelta, datetime
 import os
 from dotenv import load_dotenv
 from bson import ObjectId
+import joblib
+import numpy as np
+import sklearn
 
 # Load environment variables
 load_dotenv()
@@ -25,6 +28,10 @@ db = client['auth_db']
 users_collection = db['users']
 blacklist_collection = db['token_blacklist']
 posts_collection = db['posts']
+
+
+model = joblib.load('health_prediction_model.pkl')
+scaler = joblib.load('scaler.pkl')
 
 # Add the new routes here
 
@@ -309,6 +316,63 @@ def get_all_posts():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+
+#Model API will come here
+
+#Sample Data for prediction
+# {
+#     "Age": 25,
+#     "Gender": 1,
+#     "Weight": 70,
+#     "Height": 170,
+#     "Steps": 8000,
+#     "Sleep": 7,
+#     "Water": 2.5,
+#     "Heart_Rate": 75,
+#     "Activity_Level": 3
+# }
+
+# API route for prediction
+@app.route('/api/predict', methods=['POST'])
+def api_predict():
+    try:
+        # Get the input JSON data
+        data = request.get_json()
+
+        # Calculate BMI
+        weight = int(data['Weight'])
+        height = int(data['Height']) / 100  # Convert height to meters
+        BMI = weight / (height ** 2)
+
+        # Convert input data to a numpy array
+        input_data = np.array([
+            int(data['Age']),
+            int(data['Gender']),
+            weight,
+            height,
+            int(data['Steps']),
+            int(data['Sleep']),
+            float(data['Water']),
+            int(data['Heart_Rate']),
+            int(data['Activity_Level']),
+            BMI
+        ]).reshape(1, -1)
+
+        # Scale the input data
+        input_data_scaled = scaler.transform(input_data)
+
+        # Make a prediction
+        prediction = model.predict(input_data_scaled)
+
+        # Map prediction to health status
+        health_status = prediction[0]
+
+        # Return the result as JSON
+        return jsonify({'health_status': health_status})
+
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
