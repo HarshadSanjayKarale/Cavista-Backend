@@ -24,10 +24,11 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 jwt = JWTManager(app)
 
 #Database Connection
-client = MongoClient(os.getenv('MONGODB_URI', 'mongodb://localhost:27017/'))
+MONGODB_URI = os.getenv("MONGODB_URI")
 if not MONGODB_URI:
     raise ValueError("MONGODB_URI is not set in environment variables")
 
+client = MongoClient(MONGODB_URI)
 db = client['auth_db']
 users_collection = db['users']
 blacklist_collection = db['token_blacklist']
