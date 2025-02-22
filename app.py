@@ -449,7 +449,7 @@ def get_all_doctors():
 #Notification will start here
 # API to create a notification for appointment request
 @app.route('/api/notifications/patient', methods=['POST'])
-@jwt_required()
+
 def create_patient_notification():
     try:
         data = request.get_json()
@@ -468,7 +468,7 @@ def create_patient_notification():
 
 # API to create a notification for appointment response
 @app.route('/api/notifications/doctor', methods=['POST'])
-# @jwt_required()
+
 def create_doctor_notification():
     try:
         data = request.get_json()
@@ -489,7 +489,7 @@ def create_doctor_notification():
 
 # API to fetch notifications for a patient
 @app.route('/api/notifications/patient/<patient_id>', methods=['GET'])
-# @jwt_required()
+
 def get_patient_notifications(patient_id):
     try:
         notifications = list(notifications_collection.find({"patient_id": ObjectId(patient_id)}))
@@ -501,7 +501,6 @@ def get_patient_notifications(patient_id):
 
 # API to fetch notifications for a doctor
 @app.route('/api/notifications/doctor/<doctor_id>', methods=['GET'])
-# @jwt_required()
 def get_doctor_notifications(doctor_id):
     try:
         notifications = list(notifications_collection.find({"doctor_id": ObjectId(doctor_id)}))
