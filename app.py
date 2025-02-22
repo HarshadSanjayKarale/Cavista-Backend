@@ -559,7 +559,7 @@ def get_patient_notifications(patient_id):
 def get_doctor_notifications(doctor_id):
     try:
         notifications = list(notifications_collection.find({
-            "doctor_id": doctor_id,
+            "doctor_id": ObjectId(doctor_id),
             "notification_type": "appointment_request"
         }))
         for notification in notifications:
