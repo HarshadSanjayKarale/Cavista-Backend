@@ -30,13 +30,13 @@ def is_valid_email(email):
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
     return re.match(pattern, email) is not None
 
-@app.route('/api/auth/register', methods=['POST'])
-def register():
+@app.route('/api/auth/register/doctor', methods=['POST'])
+def register_doctor():
     try:
         data = request.get_json()
         
         # Validate required fields
-        if not all(k in data for k in ('email', 'password', 'name')):
+        if not all(k in data for k in ('username', 'email', 'mobno', 'password', 'verification_id')):
             return jsonify({'error': 'Missing required fields'}), 400
         
         # Validate email format
@@ -51,23 +51,69 @@ def register():
         if len(data['password']) < 8:
             return jsonify({'error': 'Password must be at least 8 characters long'}), 400
         
-        # Create new user
-        new_user = {
+        # Create new doctor
+        new_doctor = {
+            'username': data['username'],
             'email': data['email'],
+            'mobno': data['mobno'],
             'password': generate_password_hash(data['password']),
-            'name': data['name'],
+            'verification_id': data['verification_id'],
+            'role': 'doctor',
             'created_at': datetime.utcnow()
         }
         
-        result = users_collection.insert_one(new_user)
+        result = users_collection.insert_one(new_doctor)
         
         return jsonify({
-            'message': 'User registered successfully',
+            'message': 'Doctor registered successfully',
             'user_id': str(result.inserted_id)
         }), 201
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/register/patient', methods=['POST'])
+def register_patient():
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not all(k in data for k in ('username', 'email', 'mobno', 'password')):
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Validate email format
+        if not is_valid_email(data['email']):
+            return jsonify({'error': 'Invalid email format'}), 400
+        
+        # Check if email already exists
+        if users_collection.find_one({'email': data['email']}):
+            return jsonify({'error': 'Email already registered'}), 409
+        
+        # Validate password strength (minimum 8 characters)
+        if len(data['password']) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters long'}), 400
+        
+        # Create new patient
+        new_patient = {
+            'username': data['username'],
+            'email': data['email'],
+            'mobno': data['mobno'],
+            'password': generate_password_hash(data['password']),
+            'role': 'patient',
+            'created_at': datetime.utcnow()
+        }
+        
+        result = users_collection.insert_one(new_patient)
+        
+        return jsonify({
+            'message': 'Patient registered successfully',
+            'user_id': str(result.inserted_id)
+        }), 201
+        
+    except Exception as e:
+        print(e)
+        return jsonify({'error': str(e)}), 500
+    
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
@@ -97,13 +143,13 @@ def login():
             'user': {
                 'id': str(user['_id']),
                 'email': user['email'],
-                'name': user['name']
+                'username': user['username']
             }
         }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
+    
 @app.route('/api/auth/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh():
@@ -148,7 +194,7 @@ def get_user_profile():
         return jsonify({
             'id': str(user['_id']),
             'email': user['email'],
-            'name': user['name']
+            'username': user['username']
         }), 200
         
     except Exception as e:
@@ -171,7 +217,7 @@ def get_user_by_id(user_id):
         return jsonify({
             'id': str(user['_id']),
             'email': user['email'],
-            'name': user['name'],
+            'username': user['username'],
             'created_at': user['created_at'].isoformat() if 'created_at' in user else None
         }), 200
         
