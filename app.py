@@ -496,7 +496,6 @@ def create_patient_notification():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# API to create a notification for appointment response
 @app.route('/api/notifications/doctor', methods=['POST'])
 def create_doctor_notification():
     try:
@@ -525,8 +524,7 @@ def get_patient_notifications(patient_id):
         return jsonify({"status": "success", "notifications": notifications}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-# API to fetch notifications for a doctor
+    
 @app.route('/api/notifications/doctor/<doctor_id>', methods=['GET'])
 def get_doctor_notifications(doctor_id):
     try:
