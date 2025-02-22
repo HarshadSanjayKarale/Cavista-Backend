@@ -11,60 +11,50 @@ import numpy as np
 import sklearn
 from models import Comment, Reply
 
-# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 
-# JWT Configuration
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 jwt = JWTManager(app)
 
-# MongoDB Configuration
-# MongoDB Configuration
+#Database Connection
 client = MongoClient(os.getenv('MONGODB_URI', 'mongodb://localhost:27017/'))
 db = client['auth_db']
 users_collection = db['users']
 blacklist_collection = db['token_blacklist']
 posts_collection = db['posts']
 comments_collection = db['comments']
+notifications_collection = db['notifications']
 
 
 model = joblib.load('health_prediction_model.pkl')
 scaler = joblib.load('scaler.pkl')
 
-# Add the new routes here
-
-# Helper function to validate email format
 def is_valid_email(email):
     import re
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
     return re.match(pattern, email) is not None
-
+#Docter Registration
 @app.route('/api/auth/register/doctor', methods=['POST'])
 def register_doctor():
     try:
         data = request.get_json()
         
-        # Validate required fields
         if not all(k in data for k in ('username', 'email', 'mobno', 'password', 'verification_id')):
             return jsonify({'error': 'Missing required fields'}), 400
         
-        # Validate email format
         if not is_valid_email(data['email']):
             return jsonify({'error': 'Invalid email format'}), 400
-        
-        # Check if email already exists
+
         if users_collection.find_one({'email': data['email']}):
             return jsonify({'error': 'Email already registered'}), 409
         
-        # Validate password strength (minimum 8 characters)
         if len(data['password']) < 8:
             return jsonify({'error': 'Password must be at least 8 characters long'}), 400
         
-        # Create new doctor
         new_doctor = {
             'username': data['username'],
             'email': data['email'],
@@ -85,28 +75,25 @@ def register_doctor():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+#Patient Registration
 @app.route('/api/auth/register/patient', methods=['POST'])
 def register_patient():
     try:
         data = request.get_json()
         
-        # Validate required fields
+
         if not all(k in data for k in ('username', 'email', 'mobno', 'password')):
             return jsonify({'error': 'Missing required fields'}), 400
-        
-        # Validate email format
+
         if not is_valid_email(data['email']):
             return jsonify({'error': 'Invalid email format'}), 400
-        
-        # Check if email already exists
+
         if users_collection.find_one({'email': data['email']}):
             return jsonify({'error': 'Email already registered'}), 409
-        
-        # Validate password strength (minimum 8 characters)
+
         if len(data['password']) < 8:
             return jsonify({'error': 'Password must be at least 8 characters long'}), 400
         
-        # Create new patient
         new_patient = {
             'username': data['username'],
             'email': data['email'],
@@ -132,21 +119,17 @@ def register_patient():
 def login():
     try:
         data = request.get_json()
-        
-        # Validate required fields
+
         if not all(k in data for k in ('email', 'password')):
             return jsonify({'error': 'Missing email or password'}), 400
-        
-        # Find user
+
         user = users_collection.find_one({'email': data['email']})
         if not user:
             return jsonify({'error': 'User not found'}), 404
-        
-        # Verify password
+
         if not check_password_hash(user['password'], data['password']):
             return jsonify({'error': 'Invalid password'}), 401
-        
-        # Generate tokens
+
         access_token = create_access_token(identity=str(user['_id']))
         refresh_token = create_refresh_token(identity=str(user['_id']))
         
@@ -162,7 +145,8 @@ def login():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+
+
 @app.route('/api/auth/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh():
@@ -218,7 +202,6 @@ def get_user_profile():
 @jwt_required()
 def get_user_by_id(user_id):
     try:
-        # Validate object ID format
         if not ObjectId.is_valid(user_id):
             return jsonify({'error': 'Invalid user ID format'}), 400
             
@@ -237,15 +220,11 @@ def get_user_by_id(user_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-
-# Token blacklist checker
 @jwt.token_in_blocklist_loader
 def check_if_token_in_blacklist(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
     return blacklist_collection.find_one({'jti': jti}) is not None
 
-
-#Post API Started here
 @app.route('/api/posts', methods=['POST'])
 @jwt_required()
 def add_post():
@@ -316,7 +295,6 @@ def add_verifier(post_id):
         verifier_id = data['verifier_id']
         verifier_name = data['verifier_name']
 
-        # First, check if the verifier exists and is a doctor
         verifier = users_collection.find_one({'_id': ObjectId(verifier_id)})
         if not verifier:
             return jsonify({'error': 'Verifier not found'}), 404
@@ -324,12 +302,10 @@ def add_verifier(post_id):
         if verifier.get('role') != 'doctor':
             return jsonify({'error': 'Only doctors can verify posts'}), 403
 
-        # Then check if the post exists
         post = posts_collection.find_one({'_id': ObjectId(post_id)})
         if not post:
             return jsonify({'error': 'Post not found'}), 404
 
-        # Check if the verifier is already in the verifiedBy list
         if not any(v['verifier_id'] == verifier_id for v in post['verifiedBy']):
             verifier_info = {
                 'verifier_id': verifier_id, 
@@ -363,8 +339,6 @@ def get_all_posts():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-
-# Add this to the routes section
 from bson import ObjectId
 
 @app.route('/api/comments', methods=['POST'])
@@ -416,10 +390,8 @@ def reply_to_comment(comment_id):
 @app.route('/api/comments/<post_id>', methods=['GET'])
 def get_comments(post_id):
     try:
-        # Find all comments for the given post_id
         comments = list(comments_collection.find({'post_id': post_id}))
         
-        # Format the response
         formatted_comments = []
         for comment in comments:
             formatted_comment = {
@@ -431,8 +403,7 @@ def get_comments(post_id):
                 'created_at': comment['created_at'].isoformat() if 'created_at' in comment else None,
                 'replies': []
             }
-            
-            # Format replies if they exist
+
             if 'replies' in comment and comment['replies']:
                 for reply in comment['replies']:
                     formatted_reply = {
@@ -452,7 +423,7 @@ def get_comments(post_id):
         }), 200
 
     except Exception as e:
-        print(f"Error in get_comments: {str(e)}")  # For debugging
+        print(f"Error in get_comments: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -460,33 +431,15 @@ def get_comments(post_id):
     
 
 #Model API will come here
-
-#Sample Data for prediction
-# {
-#     "Age": 25,
-#     "Gender": 1,
-#     "Weight": 70,
-#     "Height": 170,
-#     "Steps": 8000,
-#     "Sleep": 7,
-#     "Water": 2.5,
-#     "Heart_Rate": 75,
-#     "Activity_Level": 3
-# }
-
-# API route for prediction
 @app.route('/api/predict', methods=['POST'])
 def api_predict():
     try:
-        # Get the input JSON data
         data = request.get_json()
 
-        # Calculate BMI
         weight = int(data['Weight'])
-        height = int(data['Height']) / 100  # Convert height to meters
+        height = int(data['Height']) / 100
         BMI = weight / (height ** 2)
 
-        # Convert input data to a numpy array
         input_data = np.array([
             int(data['Age']),
             int(data['Gender']),
@@ -500,16 +453,12 @@ def api_predict():
             BMI
         ]).reshape(1, -1)
 
-        # Scale the input data
         input_data_scaled = scaler.transform(input_data)
 
-        # Make a prediction
         prediction = model.predict(input_data_scaled)
 
-        # Map prediction to health status
         health_status = prediction[0]
 
-        # Return the result as JSON
         return jsonify({'health_status': health_status})
 
     except Exception as e:
@@ -525,6 +474,66 @@ def get_all_doctors():
 
         return jsonify(doctor_list), 200
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+#Notification will start here
+@app.route('/api/notifications/patient', methods=['POST'])
+@jwt_required()
+def create_patient_notification():
+    try:
+        data = request.get_json()
+        notification = {
+            'patient_id': ObjectId(data['patient_id']),
+            'doctor_id': ObjectId(data['doctor_id']),
+            'message': data['message'],
+            'notification_type': 'appointment_request',
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        notification_id = notifications_collection.insert_one(notification).inserted_id
+        return jsonify({"status": "success", "notification_id": str(notification_id)}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# API to create a notification for appointment response
+@app.route('/api/notifications/doctor', methods=['POST'])
+def create_doctor_notification():
+    try:
+        data = request.get_json()
+        notification = {
+            'patient_id': ObjectId(data['patient_id']),
+            'doctor_id': ObjectId(data['doctor_id']),
+            'message': data['message'],
+            'expected_date': data['expected_date'],
+            'expected_time': data['expected_time'],
+            'notification_type': 'appointment_response',
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        notification_id = notifications_collection.insert_one(notification).inserted_id
+        return jsonify({"status": "success", "notification_id": str(notification_id)}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/notifications/patient/<patient_id>', methods=['GET'])
+def get_patient_notifications(patient_id):
+    try:
+        notifications = list(notifications_collection.find({"patient_id": ObjectId(patient_id)}))
+        for notification in notifications:
+            notification['_id'] = str(notification['_id'])
+        return jsonify({"status": "success", "notifications": notifications}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# API to fetch notifications for a doctor
+@app.route('/api/notifications/doctor/<doctor_id>', methods=['GET'])
+def get_doctor_notifications(doctor_id):
+    try:
+        notifications = list(notifications_collection.find({"doctor_id": ObjectId(doctor_id)}))
+        for notification in notifications:
+            notification['_id'] = str(notification['_id'])
+        return jsonify({"status": "success", "notifications": notifications}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
