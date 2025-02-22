@@ -491,12 +491,28 @@ def create_doctor_notification():
 
 # API to fetch notifications for a patient
 @app.route('/api/notifications/patient/<patient_id>', methods=['GET'])
-
 def get_patient_notifications(patient_id):
     try:
-        notifications = list(notifications_collection.find({"patient_id": ObjectId(patient_id)}))
+        notifications = list(notifications_collection.find({
+            "patient_id": ObjectId(patient_id),
+            "notification_type": "appointment_response"
+        }))
         for notification in notifications:
             notification['_id'] = str(notification['_id'])
+            doctor_id = notification.get('doctor_id')
+            if doctor_id:
+                doctor = users_collection.find_one({"_id": ObjectId(doctor_id)})
+                if doctor:
+                    notification['doctor_name'] = doctor.get('username')
+                    notification['expected_date'] = notification.get('expected_date')
+                    notification['expected_time'] = notification.get('expected_time')
+                    notification['message'] = notification.get('message')
+                    notification['date'] = notification['created_at'].strftime('%Y-%m-%d')
+                    notification['time'] = notification['created_at'].strftime('%H:%M:%S')
+                    notification['doctor_id'] = str(notification['doctor_id'])  # Convert ObjectId to string
+                    notification['patient_id'] = str(notification['patient_id'])  # Convert ObjectId to string
+                    notification['created_at'] = notification['created_at'].isoformat()  # Convert datetime to ISO format string
+                    notification['updated_at'] = notification['updated_at'].isoformat()  # Convert datetime to ISO format string
         return jsonify({"status": "success", "notifications": notifications}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -505,7 +521,10 @@ def get_patient_notifications(patient_id):
 @app.route('/api/notifications/doctor/<doctor_id>', methods=['GET'])
 def get_doctor_notifications(doctor_id):
     try:
-        notifications = list(notifications_collection.find({"doctor_id": ObjectId(doctor_id)}))
+        notifications = list(notifications_collection.find({
+            "doctor_id": ObjectId(doctor_id),
+            "notification_type": "appointment_request"
+        }))
         for notification in notifications:
             notification['_id'] = str(notification['_id'])
             user_id = notification.get('patient_id')
