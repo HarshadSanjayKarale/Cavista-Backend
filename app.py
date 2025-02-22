@@ -496,7 +496,7 @@ def create_patient_notification():
             'patient_id': ObjectId(data['patient_id']),
             'doctor_id': ObjectId(data['doctor_id']),
             'message': data['message'],
-            'notification_type': 'appointment_response',
+            'notification_type': 'appointment_request',
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow()
         }
@@ -517,7 +517,7 @@ def create_doctor_notification():
             'message': data['message'],
             'expected_date': data['expected_date'],
             'expected_time': data['expected_time'],
-            'notification_type': 'appointment_request',
+            'notification_type': 'appointment_response',
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow()
         }
