@@ -7,13 +7,52 @@ import os
 from dotenv import load_dotenv
 from bson import ObjectId
 import joblib
+
 import numpy as np
-import sklearn
+import logging
 from models import Comment, Reply
+from pathlib import Path
 
 load_dotenv()
 
 app = Flask(__name__)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def load_ml_models():
+    try:
+        # Get the directory containing app.py
+        base_dir = Path(__file__).resolve().parent
+        
+        # Construct paths to model files
+        model_path = base_dir / 'health_prediction_model.pkl'
+        scaler_path = base_dir / 'scaler.pkl'
+        
+        # Check if files exist
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found at {model_path}")
+        if not scaler_path.exists():
+            raise FileNotFoundError(f"Scaler file not found at {scaler_path}")
+            
+        # Load the models
+        model = joblib.load(model_path)
+        scaler = joblib.load(scaler_path)
+        
+        logger.info("ML models loaded successfully")
+        return model, scaler
+        
+    except Exception as e:
+        logger.error(f"Error loading ML models: {str(e)}")
+        raise RuntimeError(f"Failed to load ML models: {str(e)}")
+
+# Initialize the models
+try:
+    model, scaler = load_ml_models()
+except Exception as e:
+    logger.critical("Failed to initialize ML models. Application cannot start.")
+    model = None
+    scaler = None
 
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
@@ -30,8 +69,8 @@ comments_collection = db['comments']
 notifications_collection = db['notifications']
 
 
-model = joblib.load('health_prediction_model.pkl')
-scaler = joblib.load('scaler.pkl')
+joblib.dump(model, 'health_prediction_model.pkl', protocol=4)
+joblib.dump(scaler, 'scaler.pkl', protocol=4)
 
 def is_valid_email(email):
     import re
@@ -429,46 +468,6 @@ def get_comments(post_id):
             'error': str(e)
         }), 500
     
-
-#Model API will come here
-@app.route('/api/predict', methods=['POST'])
-def api_predict():
-    try:
-        data = request.get_json()
-        
-        weight = int(data['Weight'])
-        height = int(data['Height']) / 100  # Convert height to meters
-        BMI = weight / (height ** 2)
-
-        # Convert input data to a numpy array
-        input_data = np.array([
-            int(data['Age']),
-            int(data['Gender']),
-            weight,
-            height,
-            int(data['Steps']),
-            int(data['Sleep']),
-            float(data['Water']),
-            int(data['Heart_Rate']),
-            int(data['Activity_Level']),
-            BMI
-        ]).reshape(1, -1)
-
-        # Scale the input data
-        input_data_scaled = scaler.transform(input_data)
-
-        # Make a prediction
-        prediction = model.predict(input_data_scaled)
-
-        # Map prediction to health status
-        health_status = prediction[0]
-
-        # Return the result as JSON
-        return jsonify({'health_status': health_status})
-
-    except Exception as e:
-        return jsonify({'error': str(e)})
-
 
 # List of all doctors
 @app.route('/api/doctors', methods=['GET'])
