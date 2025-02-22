@@ -306,6 +306,50 @@ def delete_post(post_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/posts/<post_id>/add_verifier', methods=['PUT'])
+@jwt_required()
+def add_verifier(post_id):
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        verifier_id = data['verifier_id']
+        verifier_name = data['verifier_name']
+
+        # First, check if the verifier exists and is a doctor
+        verifier = users_collection.find_one({'_id': ObjectId(verifier_id)})
+        if not verifier:
+            return jsonify({'error': 'Verifier not found'}), 404
+        
+        if verifier.get('role') != 'doctor':
+            return jsonify({'error': 'Only doctors can verify posts'}), 403
+
+        # Then check if the post exists
+        post = posts_collection.find_one({'_id': ObjectId(post_id)})
+        if not post:
+            return jsonify({'error': 'Post not found'}), 404
+
+        # Check if the verifier is already in the verifiedBy list
+        if not any(v['verifier_id'] == verifier_id for v in post['verifiedBy']):
+            verifier_info = {
+                'verifier_id': verifier_id, 
+                'verifier_name': verifier_name,
+                'verified_at': datetime.utcnow()
+            }
+            
+            posts_collection.update_one(
+                {'_id': ObjectId(post_id)},
+                {
+                    '$push': {'verifiedBy': verifier_info},
+                    '$inc': {'verifiedCount': 1}
+                }
+            )
+            return jsonify({'message': 'Post verified successfully'}), 200
+        else:
+            return jsonify({'message': 'Post already verified by this doctor'}), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
     
 @app.route('/api/posts', methods=['GET'])
 @jwt_required()
