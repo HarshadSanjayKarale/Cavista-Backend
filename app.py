@@ -15,7 +15,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', '')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 jwt = JWTManager(app)
@@ -37,6 +37,7 @@ def is_valid_email(email):
     import re
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
     return re.match(pattern, email) is not None
+
 #Docter Registration
 @app.route('/api/auth/register/doctor', methods=['POST'])
 def register_doctor():
