@@ -515,5 +515,18 @@ def api_predict():
     except Exception as e:
         return jsonify({'error': str(e)})
 
+
+# List of all doctors
+@app.route('/api/doctors', methods=['GET'])
+def get_all_doctors():
+    try:
+        doctors = users_collection.find({'role': 'doctor'}, {'_id': 1, 'username': 1})
+        doctor_list = [{'id': str(doctor['_id']), 'name': doctor['username']} for doctor in doctors]
+
+        return jsonify(doctor_list), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
