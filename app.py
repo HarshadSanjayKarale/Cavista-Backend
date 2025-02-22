@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify,render_template
+from flask import Flask, request, jsonify,render_template,send_file
 from flask_jwt_extended import JWTManager, create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -7,7 +7,7 @@ import os
 from dotenv import load_dotenv
 from bson import ObjectId
 import joblib
-
+import gridfs
 import numpy as np
 import logging
 from models import Comment, Reply
@@ -23,6 +23,7 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 jwt = JWTManager(app)
 
+
 #Database Connection
 MONGODB_URI = os.getenv("MONGODB_URI")
 if not MONGODB_URI:
@@ -35,6 +36,7 @@ blacklist_collection = db['token_blacklist']
 posts_collection = db['posts']
 comments_collection = db['comments']
 notifications_collection = db['notifications']
+fs = gridfs.GridFS(db)
 
 
 def is_valid_email(email):
@@ -231,18 +233,27 @@ def check_if_token_in_blacklist(jwt_header, jwt_payload):
     jti = jwt_payload['jti']
     return blacklist_collection.find_one({'jti': jti}) is not None
 
+
+
+# Initialize GridFS
 @app.route('/api/posts', methods=['POST'])
 @jwt_required()
 def add_post():
     try:
         current_user_id = get_jwt_identity()
-        data = request.get_json()
+        data = request.form
+        images = request.files.getlist('images')  # Get the list of image files
+
+        image_ids = []
+        for image in images:
+            image_id = fs.put(image.read(), filename=image.filename, content_type=image.content_type)
+            image_ids.append(str(image_id))
 
         new_post = {
             'content': data['content'],
             'authorId': current_user_id,
             'authorName': data['authorName'],
-            'images': data.get('images', []),
+            'images': image_ids,
             'comments': [],
             'verifiedCount': 0,
             'verifiedBy': [],
@@ -260,15 +271,23 @@ def add_post():
 def edit_post(post_id):
     try:
         current_user_id = get_jwt_identity()
-        data = request.get_json()
-        
+        data = request.form  # Use request.form to handle both text and file data
+        images = request.files.getlist('images')  # Get new images from the request
+
         post = posts_collection.find_one({'_id': ObjectId(post_id)})
         if post['authorId'] != current_user_id:
             return jsonify({'error': 'Unauthorized'}), 403
         
+        # Handle image updates
+        image_ids = post['images'] if 'images' in post else []
+        if images:
+            for image in images:
+                image_id = fs.put(image.stream, filename=image.filename, content_type=image.content_type)
+                image_ids.append(str(image_id))
+
         posts_collection.update_one(
             {'_id': ObjectId(post_id)},
-            {'$set': {'content': data['content'], 'images': data.get('images', post['images'])}}
+            {'$set': {'content': data['content'], 'images': image_ids}}
         )
         
         return jsonify({'message': 'Post updated successfully'}), 200
@@ -340,8 +359,26 @@ def get_all_posts():
         posts = list(posts_collection.find())
         for post in posts:
             post['_id'] = str(post['_id'])
+            post['images'] = [
+                {
+                    'file_id': image_id,
+                    'url': f"/api/posts/image/{image_id}"
+                } 
+                for image_id in post['images']
+            ]
         return jsonify(posts), 200
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/posts/image/<image_id>', methods=['GET'])
+def get_image(image_id):
+    try:
+        image = fs.get(ObjectId(image_id))
+        return send_file(image, mimetype=image.content_type, as_attachment=True,download_name=image.filename)
+
+    except gridfs.errors.NoFile:
+        return jsonify({'error': 'No file found with the specified ID'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
@@ -459,7 +496,7 @@ def create_patient_notification():
             'patient_id': ObjectId(data['patient_id']),
             'doctor_id': ObjectId(data['doctor_id']),
             'message': data['message'],
-            'notification_type': 'appointment_request',
+            'notification_type': 'appointment_response',
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow()
         }
@@ -480,7 +517,7 @@ def create_doctor_notification():
             'message': data['message'],
             'expected_date': data['expected_date'],
             'expected_time': data['expected_time'],
-            'notification_type': 'appointment_response',
+            'notification_type': 'appointment_request',
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow()
         }
@@ -522,7 +559,7 @@ def get_patient_notifications(patient_id):
 def get_doctor_notifications(doctor_id):
     try:
         notifications = list(notifications_collection.find({
-            "doctor_id": ObjectId(doctor_id),
+            "doctor_id": doctor_id,
             "notification_type": "appointment_request"
         }))
         for notification in notifications:
