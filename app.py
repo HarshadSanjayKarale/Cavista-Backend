@@ -25,6 +25,9 @@ jwt = JWTManager(app)
 
 #Database Connection
 client = MongoClient(os.getenv('MONGODB_URI', 'mongodb://localhost:27017/'))
+if not MONGODB_URI:
+    raise ValueError("MONGODB_URI is not set in environment variables")
+
 db = client['auth_db']
 users_collection = db['users']
 blacklist_collection = db['token_blacklist']
