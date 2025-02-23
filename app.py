@@ -391,11 +391,18 @@ def add_comment():
         current_user_id = get_jwt_identity()
         data = request.get_json()
 
+        user = users_collection.find_one({'_id': ObjectId(current_user_id)})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        is_verified = user.get('role') == 'doctor'
+
         new_comment = {
             'post_id': data['post_id'],
             'user_id': current_user_id,
             'username': data['username'],
             'content': data['content'],
+            'isVerified': is_verified,
             'replies': [],
             'created_at': datetime.utcnow()
         }
@@ -443,6 +450,7 @@ def get_comments(post_id):
                 'user_id': comment['user_id'],
                 'username': comment['username'],
                 'content': comment['content'],
+                'isVerified': comment.get('isVerified', False),
                 'created_at': comment['created_at'].isoformat() if 'created_at' in comment else None,
                 'replies': []
             }
