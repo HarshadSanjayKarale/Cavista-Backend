@@ -100,6 +100,10 @@ def create_app(config_class=Config):
     from app.routes.wearable.mock_routes import mock_bp
     app.register_blueprint(mock_bp, url_prefix='/api/mock/wearable')
     
+    # Register blueprints - Food Recognition Routes
+    from app.routes.food.food_routes import food_bp
+    app.register_blueprint(food_bp, url_prefix='/api/food')
+    
     @app.route('/', methods=['GET'])
     def health_check():
         """
@@ -127,7 +131,8 @@ def create_app(config_class=Config):
                 "connection": "/api/connection",
                 "appointment": "/api/appointment",
                 "notification": "/api/notification",
-                "wearable": "/api/wearable"
+                "wearable": "/api/wearable",
+                "food": "/api/food"
             },
             "features": [
                 "Patient-Doctor Connection Management",
