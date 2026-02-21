@@ -1,0 +1,1 @@
+from .patient_routes import patient_bp
