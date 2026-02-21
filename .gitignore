@@ -4,8 +4,8 @@ __pycache__/
 *$py.class
 *.so
 .Python
-
-
+flask_session
+*.session
 
 # Virtual Environment
 env/
