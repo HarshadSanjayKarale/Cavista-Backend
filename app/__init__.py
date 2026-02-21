@@ -1,5 +1,6 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
+from flask_session import Session
 from flasgger import Swagger
 from app.config import Config
 from app.extensions import mongo, init_mongo
@@ -7,6 +8,9 @@ from app.extensions import mongo, init_mongo
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    
+    # Initialize Flask-Session (for Google Fit OAuth)
+    Session(app)
     
     # Initialize MongoDB
     mongo_connected = init_mongo(app)
@@ -88,6 +92,14 @@ def create_app(config_class=Config):
     from app.routes.notification.notification_routes import notification_bp
     app.register_blueprint(notification_bp, url_prefix='/api/notification')
     
+    # Register blueprints - Wearable Routes
+    from app.routes.wearable.wearable_routes import wearable_bp
+    app.register_blueprint(wearable_bp, url_prefix='/api/wearable')
+    
+    # Register blueprints - Mock Wearable Routes (for testing)
+    from app.routes.wearable.mock_routes import mock_bp
+    app.register_blueprint(mock_bp, url_prefix='/api/mock/wearable')
+    
     @app.route('/', methods=['GET'])
     def health_check():
         """
@@ -114,7 +126,8 @@ def create_app(config_class=Config):
                 "doctor": "/api/doctor",
                 "connection": "/api/connection",
                 "appointment": "/api/appointment",
-                "notification": "/api/notification"
+                "notification": "/api/notification",
+                "wearable": "/api/wearable"
             },
             "features": [
                 "Patient-Doctor Connection Management",
@@ -122,7 +135,8 @@ def create_app(config_class=Config):
                 "AI-Powered Health Analytics",
                 "Medication Reminders",
                 "Fall Detection (Elderly Care)",
-                "Virtual Health Assistant"
+                "Virtual Health Assistant",
+                "Google Fit Integration"
             ]
         }), 200
     
