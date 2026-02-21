@@ -7,6 +7,7 @@ from app.models.doctor.doctor_model import Doctor
 from app.utils.auth_utils import token_required
 from app.utils.response_utils import success_response, error_response
 from app.config import Config
+from bson import ObjectId
 
 doctor_bp = Blueprint('doctor', __name__)
 
@@ -110,12 +111,14 @@ def register():
         result = mongo.db.users.insert_one(doctor.to_dict())
         
         return success_response(
-            "Doctor registered successfully. Verification pending.",
+            "Doctor registered successfully. Please complete your profile.",
             {
                 "doctor_id": str(result.inserted_id),
                 "email": email,
                 "full_name": doctor.full_name,
-                "is_verified": False
+                "is_verified": False,
+                "is_profile_complete": False,
+                "message": "Please provide mobile number, degree, degree college, and clinic address to complete your profile"
             },
             201
         )
@@ -192,8 +195,10 @@ def login():
                     "email": user['email'],
                     "full_name": user['full_name'],
                     "specialization": user.get('specialization'),
-                    "is_verified": user.get('is_verified', False)
-                }
+                    "is_verified": user.get('is_verified', False),
+                    "is_profile_complete": user.get('is_profile_complete', False)
+                },
+                "redirect_to_profile": not user.get('is_profile_complete', False)
             }
         )
         
@@ -201,9 +206,134 @@ def login():
         return error_response(str(e), 500)
 
 
-@doctor_bp.route('/profile', methods=['GET'])
+@doctor_bp.route('/complete-profile/<doctor_id>', methods=['POST'])
 @token_required
-def get_profile(current_user):
+def complete_profile(current_user, doctor_id):
+    """
+    Complete doctor profile (mandatory after signup)
+    ---
+    tags:
+      - Doctor Profile
+    security:
+      - Bearer: []
+    parameters:
+      - name: doctor_id
+        in: path
+        type: string
+        required: true
+        description: Doctor ID (returned from registration/login)
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - mobile_number
+            - degree
+            - degree_college
+            - clinic_address
+          properties:
+            mobile_number:
+              type: string
+              example: "9876543210"
+            degree:
+              type: string
+              example: "MBBS, MD"
+            degree_college:
+              type: string
+              example: "Harvard Medical School"
+            clinic_address:
+              type: string
+              example: "123 Medical Center, New York"
+            clinic_name:
+              type: string
+              example: "Smith Heart Clinic"
+            clinic_phone:
+              type: string
+              example: "1234567890"
+            consultation_mode:
+              type: array
+              items:
+                type: string
+              example: ["in-person", "video"]
+            languages_spoken:
+              type: array
+              items:
+                type: string
+              example: ["English", "Hindi"]
+            registration_year:
+              type: integer
+              example: 2010
+            medical_council:
+              type: string
+              example: "Medical Council of India"
+    responses:
+      200:
+        description: Profile completed successfully
+    """
+    try:
+        if current_user['role'] != 'doctor':
+            return error_response("Access denied. Doctor only.", 403)
+        
+        # Verify doctor_id matches current user
+        if str(current_user['_id']) != doctor_id:
+            return error_response("You can only update your own profile", 403)
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['mobile_number', 'degree', 'degree_college', 'clinic_address']
+        if not all(field in data for field in required_fields):
+            return error_response("Missing required fields: mobile_number, degree, degree_college, clinic_address", 400)
+        
+        # Prepare update data
+        update_data = {
+            'mobile_number': data['mobile_number'],
+            'degree': data['degree'],
+            'degree_college': data['degree_college'],
+            'clinic_address': data['clinic_address'],
+            'is_profile_complete': True,
+            'updated_at': datetime.utcnow()
+        }
+        
+        # Optional fields
+        if 'clinic_name' in data:
+            update_data['clinic_name'] = data['clinic_name']
+        if 'clinic_phone' in data:
+            update_data['clinic_phone'] = data['clinic_phone']
+        if 'consultation_mode' in data:
+            update_data['consultation_mode'] = data['consultation_mode']
+        if 'languages_spoken' in data:
+            update_data['languages_spoken'] = data['languages_spoken']
+        if 'registration_year' in data:
+            update_data['registration_year'] = int(data['registration_year'])
+        if 'medical_council' in data:
+            update_data['medical_council'] = data['medical_council']
+        
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(doctor_id)},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count > 0:
+            return success_response(
+                "Profile completed successfully. Awaiting verification.",
+                {
+                    "doctor_id": doctor_id,
+                    "is_profile_complete": True,
+                    "is_verified": False,
+                    "message": "Your profile is under review by our team. You will be notified once verified."
+                }
+            )
+        return error_response("No changes made", 400)
+        
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@doctor_bp.route('/profile/<doctor_id>', methods=['GET'])
+@token_required
+def get_profile(current_user, doctor_id):
     """
     Get doctor profile
     ---
@@ -211,6 +341,12 @@ def get_profile(current_user):
       - Doctor Profile
     security:
       - Bearer: []
+    parameters:
+      - name: doctor_id
+        in: path
+        type: string
+        required: true
+        description: Doctor ID
     responses:
       200:
         description: Profile retrieved successfully
@@ -219,32 +355,67 @@ def get_profile(current_user):
         if current_user['role'] != 'doctor':
             return error_response("Access denied. Doctor only.", 403)
         
+        # Verify doctor_id matches current user
+        if str(current_user['_id']) != doctor_id:
+            return error_response("You can only view your own profile", 403)
+        
+        user = mongo.db.users.find_one({"_id": ObjectId(doctor_id), "role": "doctor"})
+        
+        if not user:
+            return error_response("Doctor not found", 404)
+        
         return success_response(
             "Profile retrieved",
             {
-                "id": str(current_user['_id']),
-                "email": current_user['email'],
-                "full_name": current_user['full_name'],
-                "phone": current_user.get('phone'),
-                "specialization": current_user.get('specialization'),
-                "license_number": current_user.get('license_number'),
-                "qualification": current_user.get('qualification'),
-                "experience_years": current_user.get('experience_years'),
-                "consultation_fee": current_user.get('consultation_fee'),
-                "available_days": current_user.get('available_days', []),
-                "available_hours": current_user.get('available_hours'),
-                "is_verified": current_user.get('is_verified', False),
-                "patients": current_user.get('patients', []),
-                "appointments": current_user.get('appointments', [])
+                "id": str(user['_id']),
+                "email": user['email'],
+                "full_name": user['full_name'],
+                "phone": user.get('phone'),
+                "specialization": user.get('specialization'),
+                "license_number": user.get('license_number'),
+                "qualification": user.get('qualification'),
+                "experience_years": user.get('experience_years'),
+                "consultation_fee": user.get('consultation_fee'),
+                "available_days": user.get('available_days', []),
+                "available_hours": user.get('available_hours'),
+                
+                # Required profile fields
+                "mobile_number": user.get('mobile_number'),
+                "degree": user.get('degree'),
+                "degree_college": user.get('degree_college'),
+                "clinic_address": user.get('clinic_address'),
+                
+                # Additional details
+                "clinic_name": user.get('clinic_name'),
+                "clinic_phone": user.get('clinic_phone'),
+                "consultation_mode": user.get('consultation_mode', []),
+                "languages_spoken": user.get('languages_spoken', []),
+                "registration_year": user.get('registration_year'),
+                "medical_council": user.get('medical_council'),
+                "certifications": user.get('certifications', []),
+                
+                # Stats
+                "rating": user.get('rating', 0.0),
+                "total_reviews": user.get('total_reviews', 0),
+                "total_consultations": user.get('total_consultations', 0),
+                "connected_patients_count": len(user.get('connected_patients', [])),
+                "pending_requests_count": len(user.get('pending_connection_requests', [])),
+                
+                # Status
+                "is_verified": user.get('is_verified', False),
+                "is_profile_complete": user.get('is_profile_complete', False),
+                "is_accepting_patients": user.get('is_accepting_patients', True),
+                
+                "appointments": user.get('appointments', [])
             }
         )
     except Exception as e:
         return error_response(str(e), 500)
 
 
-@doctor_bp.route('/profile', methods=['PUT'])
+@doctor_bp.route('/profile/<doctor_id>', methods=['PUT'])
 @token_required
-def update_profile(current_user):
+def update_profile(current_user, doctor_id):
     """
     Update doctor profile
     ---
@@ -253,6 +424,11 @@ def update_profile(current_user):
     security:
       - Bearer: []
     parameters:
+      - name: doctor_id
+        in: path
+        type: string
+        required: true
+        description: Doctor ID
       - in: body
         name: body
         schema:
@@ -274,6 +450,24 @@ def update_profile(current_user):
                 type: string
             available_hours:
               type: string
+            mobile_number:
+              type: string
+            clinic_address:
+              type: string
+            clinic_name:
+              type: string
+            clinic_phone:
+              type: string
+            consultation_mode:
+              type: array
+              items:
+                type: string
+            languages_spoken:
+              type: array
+              items:
+                type: string
+            is_accepting_patients:
+              type: boolean
     responses:
       200:
         description: Profile updated successfully
@@ -282,13 +476,23 @@ def update_profile(current_user):
         if current_user['role'] != 'doctor':
             return error_response("Access denied. Doctor only.", 403)
         
+        # Verify doctor_id matches current user
+        if str(current_user['_id']) != doctor_id:
+            return error_response("You can only update your own profile", 403)
+        
         data = request.get_json()
         
         if not data:
             return error_response("No data provided", 400)
         
-        allowed_fields = ['full_name', 'phone', 'qualification', 'experience_years',
-                         'consultation_fee', 'available_days', 'available_hours']
+        allowed_fields = [
+            'full_name', 'phone', 'qualification', 'experience_years',
+            'consultation_fee', 'available_days', 'available_hours',
+            'mobile_number', 'clinic_address', 'clinic_name', 'clinic_phone',
+            'consultation_mode', 'languages_spoken', 'is_accepting_patients',
+            'certifications', 'sub_specializations', 'conditions_treated'
+        ]
+        
         update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
         
         if not update_data:
@@ -297,21 +501,21 @@ def update_profile(current_user):
         update_data['updated_at'] = datetime.utcnow()
         
         result = mongo.db.users.update_one(
-            {"_id": current_user['_id']},
+            {"_id": ObjectId(doctor_id)},
             {"$set": update_data}
         )
         
         if result.modified_count > 0:
-            return success_response("Profile updated successfully")
+            return success_response("Profile updated successfully", {"doctor_id": doctor_id})
         return error_response("No changes made", 400)
         
     except Exception as e:
         return error_response(str(e), 500)
 
 
-@doctor_bp.route('/change-password', methods=['PUT'])
+@doctor_bp.route('/change-password/<doctor_id>', methods=['PUT'])
 @token_required
-def change_password(current_user):
+def change_password(current_user, doctor_id):
     """
     Change doctor password
     ---
@@ -320,6 +524,11 @@ def change_password(current_user):
     security:
       - Bearer: []
     parameters:
+      - name: doctor_id
+        in: path
+        type: string
+        required: true
+        description: Doctor ID
       - in: body
         name: body
         required: true
@@ -341,6 +550,10 @@ def change_password(current_user):
         if current_user['role'] != 'doctor':
             return error_response("Access denied. Doctor only.", 403)
         
+        # Verify doctor_id matches current user
+        if str(current_user['_id']) != doctor_id:
+            return error_response("You can only change your own password", 403)
+        
         data = request.get_json()
         
         if not data or 'old_password' not in data or 'new_password' not in data:
@@ -357,14 +570,14 @@ def change_password(current_user):
         hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), salt)
         
         mongo.db.users.update_one(
-            {"_id": current_user['_id']},
+            {"_id": ObjectId(doctor_id)},
             {"$set": {
                 "password": hashed_password,
                 "updated_at": datetime.utcnow()
             }}
         )
         
-        return success_response("Password changed successfully")
+        return success_response("Password changed successfully", {"doctor_id": doctor_id})
         
     except Exception as e:
         return error_response(str(e), 500)
@@ -387,3 +600,72 @@ def logout(current_user):
     if current_user['role'] != 'doctor':
         return error_response("Access denied. Doctor only.", 403)
     return success_response("Logged out successfully")
+
+
+@doctor_bp.route('/search', methods=['GET'])
+def search_doctors():
+    """
+    Search doctors by specialization, name, or location
+    ---
+    tags:
+      - Doctor Search
+    parameters:
+      - name: specialization
+        in: query
+        type: string
+        description: Filter by specialization
+      - name: name
+        in: query
+        type: string
+        description: Search by doctor name
+      - name: location
+        in: query
+        type: string
+        description: Search by location
+      - name: min_rating
+        in: query
+        type: number
+        description: Minimum rating
+      - name: is_verified
+        in: query
+        type: boolean
+        description: Only verified doctors
+    responses:
+      200:
+        description: List of doctors
+    """
+    try:
+        query = {"role": "doctor", "is_active": True, "is_profile_complete": True}
+        
+        # Filters
+        if request.args.get('specialization'):
+            query['specialization'] = {"$regex": request.args.get('specialization'), "$options": "i"}
+        
+        if request.args.get('name'):
+            query['full_name'] = {"$regex": request.args.get('name'), "$options": "i"}
+        
+        if request.args.get('location'):
+            query['clinic_address'] = {"$regex": request.args.get('location'), "$options": "i"}
+        
+        if request.args.get('min_rating'):
+            query['rating'] = {"$gte": float(request.args.get('min_rating'))}
+        
+        if request.args.get('is_verified') == 'true':
+            query['is_verified'] = True
+        
+        doctors = list(mongo.db.users.find(query, {
+            'password': 0,
+            'connected_patients': 0,
+            'pending_connection_requests': 0
+        }).limit(50))
+        
+        for doctor in doctors:
+            doctor['_id'] = str(doctor['_id'])
+        
+        return success_response(
+            f"Found {len(doctors)} doctors",
+            {"doctors": doctors, "count": len(doctors)}
+        )
+        
+    except Exception as e:
+        return error_response(str(e), 500)

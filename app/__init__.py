@@ -49,8 +49,8 @@ def create_app(config_class=Config):
     swagger_template = {
         "swagger": "2.0",
         "info": {
-            "title": "Cavista Hackathon 2026 - Healthcare API",
-            "description": "Separate APIs for Patients and Doctors with JWT Authentication",
+            "title": "AI-Driven Preventive Health Companion API",
+            "description": "Healthcare platform connecting patients and doctors with AI-powered health monitoring",
             "version": "1.0.0"
         },
         "host": "localhost:5000",
@@ -76,6 +76,10 @@ def create_app(config_class=Config):
     from app.routes.doctor.doctor_routes import doctor_bp
     app.register_blueprint(doctor_bp, url_prefix='/api/doctor')
     
+    # Register blueprints - Connection Routes
+    from app.routes.connection.connection_routes import connection_bp
+    app.register_blueprint(connection_bp, url_prefix='/api/connection')
+    
     @app.route('/', methods=['GET'])
     def health_check():
         """
@@ -94,13 +98,22 @@ def create_app(config_class=Config):
             mongo_status = "disconnected"
         
         return jsonify({
-            "message": "Healthcare API is running",
+            "message": "AI-Driven Preventive Health Companion API is running",
             "docs": "/apidocs",
             "mongodb": mongo_status,
             "endpoints": {
                 "patient": "/api/patient",
-                "doctor": "/api/doctor"
-            }
+                "doctor": "/api/doctor",
+                "connection": "/api/connection"
+            },
+            "features": [
+                "Patient-Doctor Connection Management",
+                "Wearable Integration",
+                "AI-Powered Health Analytics",
+                "Medication Reminders",
+                "Fall Detection (Elderly Care)",
+                "Virtual Health Assistant"
+            ]
         }), 200
     
     @app.errorhandler(Exception)
