@@ -108,6 +108,10 @@ def create_app(config_class=Config):
     from app.routes.risk.risk_routes import risk_bp
     app.register_blueprint(risk_bp, url_prefix='/api/risk')
     
+    # Register blueprints - Clinical Narrative Routes (Multi-Agent LLM)
+    from app.routes.risk.clinical_narrative_routes import clinical_bp
+    app.register_blueprint(clinical_bp, url_prefix='/api/clinical')
+    
     @app.route('/', methods=['GET'])
     def health_check():
         """
@@ -137,7 +141,8 @@ def create_app(config_class=Config):
                 "notification": "/api/notification",
                 "wearable": "/api/wearable",
                 "food": "/api/food",
-                "risk": "/api/risk"
+                "risk": "/api/risk",
+                "clinical": "/api/clinical"
             },
             "features": [
                 "Patient-Doctor Connection Management",
