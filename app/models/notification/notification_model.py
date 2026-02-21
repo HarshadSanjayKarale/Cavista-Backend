@@ -1,15 +1,28 @@
 from datetime import datetime
 from bson import ObjectId
+from typing import Optional, Dict
 
 class NotificationModel:
     def __init__(self, db):
         self.collection = db['notifications']
     
-    def create_notification(self, user_id, message):
-        """Create a new notification"""
+    def create_notification(self, user_id, message, title=None,
+                            notification_type='general', data=None):
+        """Create a new notification.
+
+        Args:
+            user_id: Target user ObjectId string.
+            message: Notification body text.
+            title: Optional short heading.
+            notification_type: Category tag (general, vitals_critical, etc.).
+            data: Optional extra payload dict.
+        """
         notification = {
             "user_id": user_id,
+            "title": title or "",
             "message": message,
+            "type": notification_type,
+            "data": data or {},
             "is_read": False,
             "created_at": datetime.utcnow()
         }

@@ -19,6 +19,10 @@ venv.bak/
 .env.local
 .env.*.local
 
+# Firebase service account key (NEVER commit this)
+*firebase-service-account*.json
+*serviceAccountKey*.json
+
 # IDE
 .vscode/
 .idea/
