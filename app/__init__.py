@@ -112,6 +112,10 @@ def create_app(config_class=Config):
     from app.routes.risk.clinical_narrative_routes import clinical_bp
     app.register_blueprint(clinical_bp, url_prefix='/api/clinical')
     
+    # Register blueprints - Diet Recommendation Routes
+    from app.routes.diet.diet_routes import diet_bp
+    app.register_blueprint(diet_bp, url_prefix='/api/diet')
+    
     # Register blueprints - Medication Routes
     from app.routes.medication.medication_routes import medication_bp
     app.register_blueprint(medication_bp, url_prefix='/api/medication')
@@ -147,6 +151,7 @@ def create_app(config_class=Config):
                 "food": "/api/food",
                 "risk": "/api/risk",
                 "clinical": "/api/clinical",
+                "diet": "/api/diet",
                 "medication": "/api/medication"
             },
             "features": [
