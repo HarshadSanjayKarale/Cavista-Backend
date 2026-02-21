@@ -7,3 +7,9 @@ PyJWT==2.8.0
 pymongo==4.6.1
 flasgger==0.9.7.1
 flask-swagger-ui==4.11.1
+ultralytics
+pillow
+requests
+pymongo
+fastapi
+bson
