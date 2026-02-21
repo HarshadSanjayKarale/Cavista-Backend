@@ -375,10 +375,29 @@ def get_profile(current_user, doctor_id):
         if not user:
             return error_response("Doctor not found", 404)
         
+        # Helper function to convert ObjectId to string recursively
+        def convert_objectid(obj):
+            if isinstance(obj, ObjectId):
+                return str(obj)
+            elif isinstance(obj, dict):
+                return {key: convert_objectid(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_objectid(item) for item in obj]
+            else:
+                return obj
+        
+        # Convert all ObjectIds in user document
+        user = convert_objectid(user)
+        
+        # Build response with explicit conversion
+        appointments = user.get('appointments', [])
+        connected_patients = user.get('connected_patients', [])
+        pending_requests = user.get('pending_connection_requests', [])
+        
         return success_response(
             "Profile retrieved",
             {
-                "id": str(user['_id']),
+                "id": user['_id'],
                 "email": user['email'],
                 "full_name": user['full_name'],
                 "phone": user.get('phone'),
@@ -409,15 +428,17 @@ def get_profile(current_user, doctor_id):
                 "rating": user.get('rating', 0.0),
                 "total_reviews": user.get('total_reviews', 0),
                 "total_consultations": user.get('total_consultations', 0),
-                "connected_patients_count": len(user.get('connected_patients', [])),
-                "pending_requests_count": len(user.get('pending_connection_requests', [])),
+                "connected_patients_count": len(connected_patients) if isinstance(connected_patients, list) else 0,
+                "pending_requests_count": len(pending_requests) if isinstance(pending_requests, list) else 0,
                 
                 # Status
                 "is_verified": user.get('is_verified', False),
                 "is_profile_complete": user.get('is_profile_complete', False),
                 "is_accepting_patients": user.get('is_accepting_patients', True),
                 
-                "appointments": user.get('appointments', [])
+                "appointments": appointments,
+                "connected_patients": connected_patients,
+                "pending_connection_requests": pending_requests
             }
         )
     except Exception as e:
