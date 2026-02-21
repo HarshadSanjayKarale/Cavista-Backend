@@ -84,6 +84,10 @@ def create_app(config_class=Config):
     from app.routes.appointment.appointment_routes import appointment_bp
     app.register_blueprint(appointment_bp, url_prefix='/api/appointment')
     
+    # Register blueprints - Notification Routes
+    from app.routes.notification.notification_routes import notification_bp
+    app.register_blueprint(notification_bp, url_prefix='/api/notification')
+    
     @app.route('/', methods=['GET'])
     def health_check():
         """
@@ -109,7 +113,8 @@ def create_app(config_class=Config):
                 "patient": "/api/patient",
                 "doctor": "/api/doctor",
                 "connection": "/api/connection",
-                "appointment": "/api/appointment"
+                "appointment": "/api/appointment",
+                "notification": "/api/notification"
             },
             "features": [
                 "Patient-Doctor Connection Management",
