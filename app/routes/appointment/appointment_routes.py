@@ -13,7 +13,7 @@ appointment_bp = Blueprint('appointment', __name__)
 @token_required
 def request_appointment(current_user):
     """
-    Patient requests appointment with connected doctor
+    Patient requests appointment with doctor
     ---
     tags:
       - Appointments
@@ -27,12 +27,16 @@ def request_appointment(current_user):
           type: object
           required:
             - doctor_id
+            - patient_id
             - appointment_type
             - reason
           properties:
             doctor_id:
               type: string
               example: "699955bb562fe7307f7c1022"
+            patient_id:
+              type: string
+              example: "69995140635e07c46278e903"
             appointment_type:
               type: string
               enum: [consultation, follow-up, emergency, checkup]
@@ -62,30 +66,31 @@ def request_appointment(current_user):
       201:
         description: Appointment request sent successfully
       403:
-        description: Not connected with doctor
+        description: Invalid request
     """
     try:
-        if current_user['role'] != 'patient':
-            return error_response("Only patients can request appointments", 403)
-        
         data = request.get_json()
         
         # Validate required fields
-        required_fields = ['doctor_id', 'appointment_type', 'reason']
+        required_fields = ['doctor_id', 'patient_id', 'appointment_type', 'reason']
         if not all(field in data for field in required_fields):
-            return error_response("Missing required fields: doctor_id, appointment_type, reason", 400)
+            return error_response("Missing required fields: doctor_id, patient_id, appointment_type, reason", 400)
         
         doctor_id = data['doctor_id']
+        patient_id = data['patient_id']
         
-        # Check if connection exists and is active
-        connection = mongo.db.connections.find_one({
-            "patient_id": ObjectId(current_user['_id']),
-            "doctor_id": ObjectId(doctor_id),
-            "status": "active"
+        # Verify the logged-in user matches the patient_id (security check)
+        if current_user['role'] == 'patient' and str(current_user['_id']) != patient_id:
+            return error_response("You can only create appointments for yourself", 403)
+        
+        # Check if patient exists
+        patient = mongo.db.users.find_one({
+            "_id": ObjectId(patient_id),
+            "role": "patient"
         })
         
-        if not connection:
-            return error_response("You are not connected with this doctor. Please establish connection first.", 403)
+        if not patient:
+            return error_response("Patient not found", 404)
         
         # Check if doctor exists and is active
         doctor = mongo.db.users.find_one({
@@ -105,11 +110,37 @@ def request_appointment(current_user):
         if data['appointment_type'] not in valid_types:
             return error_response(f"Invalid appointment_type. Must be one of: {', '.join(valid_types)}", 400)
         
+        # Check if connection exists, if not create one automatically
+        connection = mongo.db.connections.find_one({
+            "patient_id": ObjectId(patient_id),
+            "doctor_id": ObjectId(doctor_id)
+        })
+        
+        if not connection:
+            # Auto-create connection
+            connection_data = {
+                "patient_id": ObjectId(patient_id),
+                "doctor_id": ObjectId(doctor_id),
+                "status": "active",
+                "connected_at": datetime.utcnow(),
+                "connection_type": "appointment_based"
+            }
+            connection_result = mongo.db.connections.insert_one(connection_data)
+            connection_id = connection_result.inserted_id
+        else:
+            connection_id = connection['_id']
+            # Update connection status to active if it was inactive
+            if connection.get('status') != 'active':
+                mongo.db.connections.update_one(
+                    {"_id": connection_id},
+                    {"$set": {"status": "active"}}
+                )
+        
         # Create appointment
         appointment = Appointment(
-            patient_id=ObjectId(current_user['_id']),
+            patient_id=ObjectId(patient_id),
             doctor_id=ObjectId(doctor_id),
-            connection_id=connection['_id'],
+            connection_id=connection_id,
             appointment_type=data['appointment_type'],
             reason=data['reason'],
             symptoms=data.get('symptoms', []),
@@ -127,7 +158,7 @@ def request_appointment(current_user):
         
         # Add appointment reference to both patient and doctor
         mongo.db.users.update_one(
-            {"_id": ObjectId(current_user['_id'])},
+            {"_id": ObjectId(patient_id)},
             {"$addToSet": {"appointments": result.inserted_id}}
         )
         
@@ -140,6 +171,11 @@ def request_appointment(current_user):
             "Appointment request sent successfully",
             {
                 "appointment_id": str(result.inserted_id),
+                "patient": {
+                    "id": str(patient['_id']),
+                    "name": patient['full_name'],
+                    "email": patient['email']
+                },
                 "doctor": {
                     "id": str(doctor['_id']),
                     "name": doctor['full_name'],
