@@ -1,12 +1,22 @@
 from flask import Blueprint, request
 from datetime import datetime
 from app.extensions import mongo
-from app.models.connection.connection_model import Connection
 from app.utils.auth_utils import token_required
 from app.utils.response_utils import success_response, error_response
 from bson import ObjectId
 
 connection_bp = Blueprint('connection', __name__)
+
+# Helper function to convert ObjectId to string recursively
+def convert_objectid(obj):
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_objectid(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_objectid(item) for item in obj]
+    else:
+        return obj
 
 @connection_bp.route('/request', methods=['POST'])
 @token_required
@@ -249,119 +259,66 @@ def reject_connection(current_user, connection_id):
 @token_required
 def get_my_connections(current_user):
     """
-    Get all connections for current user
-    ---
-    tags:
-      - Patient-Doctor Connection
-    security:
-      - Bearer: []
-    parameters:
-      - name: status
-        in: query
-        type: string
-        description: Filter by status (pending, active, rejected)
-    responses:
-      200:
-        description: List of connections
+    Get user's connections (patients for doctors, doctors for patients)
     """
     try:
-        query = {}
+        user_id = str(current_user['_id'])
+        role = current_user['role']
         
-        if current_user['role'] == 'patient':
-            query['patient_id'] = str(current_user['_id'])
-        elif current_user['role'] == 'doctor':
-            query['doctor_id'] = str(current_user['_id'])
-        else:
-            return error_response("Invalid role", 403)
-        
-        if request.args.get('status'):
-            query['status'] = request.args.get('status')
-        
-        connections = list(mongo.db.connections.find(query))
-        
-        # Populate user details
-        for conn in connections:
-            conn['_id'] = str(conn['_id'])
+        if role == 'doctor':
+            # Get connected patients
+            user = mongo.db.users.find_one(
+                {"_id": ObjectId(user_id)},
+                {"connected_patients": 1}
+            )
             
-            if current_user['role'] == 'patient':
-                doctor = mongo.db.users.find_one(
-                    {"_id": ObjectId(conn['doctor_id'])},
-                    {"password": 0, "connected_patients": 0}
-                )
-                if doctor:
-                    doctor['_id'] = str(doctor['_id'])
-                    conn['doctor'] = doctor
-            else:
-                patient = mongo.db.users.find_one(
-                    {"_id": ObjectId(conn['patient_id'])},
-                    {"password": 0, "connected_doctors": 0}
-                )
-                if patient:
-                    patient['_id'] = str(patient['_id'])
-                    conn['patient'] = patient
+            if not user:
+                return error_response("User not found", 404)
+            
+            connected_ids = user.get('connected_patients', [])
+            
+            # Fetch patient details
+            connections = []
+            if connected_ids:
+                patients = list(mongo.db.users.find(
+                    {"_id": {"$in": [ObjectId(pid) for pid in connected_ids]}, "role": "patient"},
+                    {"password": 0}
+                ))
+                connections = convert_objectid(patients)
+            
+            return success_response(
+                f"Found {len(connections)} connected patients",
+                {"connections": connections, "count": len(connections), "type": "patients"}
+            )
+            
+        elif role == 'patient':
+            # Get connected doctors
+            user = mongo.db.users.find_one(
+                {"_id": ObjectId(user_id)},
+                {"connected_doctors": 1}
+            )
+            
+            if not user:
+                return error_response("User not found", 404)
+            
+            connected_ids = user.get('connected_doctors', [])
+            
+            # Fetch doctor details
+            connections = []
+            if connected_ids:
+                doctors = list(mongo.db.users.find(
+                    {"_id": {"$in": [ObjectId(did) for did in connected_ids]}, "role": "doctor"},
+                    {"password": 0}
+                ))
+                connections = convert_objectid(doctors)
+            
+            return success_response(
+                f"Found {len(connections)} connected doctors",
+                {"connections": connections, "count": len(connections), "type": "doctors"}
+            )
         
-        return success_response(
-            f"Found {len(connections)} connections",
-            {"connections": connections, "count": len(connections)}
-        )
-        
-    except Exception as e:
-        return error_response(str(e), 500)
-
-
-@connection_bp.route('/disconnect/<connection_id>', methods=['DELETE'])
-@token_required
-def disconnect(current_user, connection_id):
-    """
-    Disconnect patient-doctor connection
-    ---
-    tags:
-      - Patient-Doctor Connection
-    security:
-      - Bearer: []
-    parameters:
-      - name: connection_id
-        in: path
-        type: string
-        required: true
-    responses:
-      200:
-        description: Connection removed
-    """
-    try:
-        connection = mongo.db.connections.find_one({
-            "_id": ObjectId(connection_id),
-            "$or": [
-                {"patient_id": str(current_user['_id'])},
-                {"doctor_id": str(current_user['_id'])}
-            ],
-            "status": "active"
-        })
-        
-        if not connection:
-            return error_response("Connection not found", 404)
-        
-        # Update connection status
-        mongo.db.connections.update_one(
-            {"_id": ObjectId(connection_id)},
-            {"$set": {
-                "status": "inactive",
-                "updated_at": datetime.utcnow()
-            }}
-        )
-        
-        # Remove from both users' lists
-        mongo.db.users.update_one(
-            {"_id": ObjectId(connection['doctor_id'])},
-            {"$pull": {"connected_patients": connection['patient_id']}}
-        )
-        
-        mongo.db.users.update_one(
-            {"_id": ObjectId(connection['patient_id'])},
-            {"$pull": {"connected_doctors": connection['doctor_id']}}
-        )
-        
-        return success_response("Connection removed successfully")
-        
+        else:
+            return error_response("Invalid user role", 400)
+            
     except Exception as e:
         return error_response(str(e), 500)
