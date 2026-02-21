@@ -629,3 +629,375 @@ def logout(current_user):
     if current_user['role'] != 'patient':
         return error_response("Access denied. Patient only.", 403)
     return success_response("Logged out successfully")
+
+
+@patient_bp.route('/browse-doctors', methods=['GET'])
+@token_required
+def browse_doctors(current_user):
+    """
+    Browse available doctors with detailed information
+    ---
+    tags:
+      - Patient Profile
+    security:
+      - Bearer: []
+    parameters:
+      - name: specialization
+        in: query
+        type: string
+        description: Filter by specialization (e.g., Cardiology, Dermatology)
+      - name: min_experience
+        in: query
+        type: integer
+        description: Minimum years of experience
+      - name: max_fee
+        in: query
+        type: number
+        description: Maximum consultation fee
+      - name: min_rating
+        in: query
+        type: number
+        description: Minimum rating (0-5)
+      - name: location
+        in: query
+        type: string
+        description: Search by city or area
+      - name: consultation_mode
+        in: query
+        type: string
+        description: Filter by mode (in-person, video, phone)
+      - name: language
+        in: query
+        type: string
+        description: Filter by language spoken
+      - name: is_accepting_patients
+        in: query
+        type: boolean
+        description: Only show doctors accepting new patients
+      - name: sort_by
+        in: query
+        type: string
+        description: Sort by (rating, experience, fee_low, fee_high)
+      - name: page
+        in: query
+        type: integer
+        description: Page number (default 1)
+      - name: limit
+        in: query
+        type: integer
+        description: Results per page (default 20)
+    responses:
+      200:
+        description: List of doctors with detailed information
+    """
+    try:
+        if current_user['role'] != 'patient':
+            return error_response("Access denied. Patient only.", 403)
+        
+        # Build query - simplified to just show doctors with role="doctor"
+        query = {
+            "role": "doctor"
+        }
+        
+        # Optional: only show active doctors if the field exists
+        # Remove or comment these filters if you want to see all doctors
+        # query["is_active"] = {"$ne": False}  # Show if is_active is True or doesn't exist
+        
+        # Apply filters
+        if request.args.get('specialization'):
+            query['specialization'] = {"$regex": request.args.get('specialization'), "$options": "i"}
+        
+        if request.args.get('min_experience'):
+            query['experience_years'] = {"$gte": int(request.args.get('min_experience'))}
+        
+        if request.args.get('max_fee'):
+            query['consultation_fee'] = {"$lte": float(request.args.get('max_fee'))}
+        
+        if request.args.get('min_rating'):
+            query['rating'] = {"$gte": float(request.args.get('min_rating'))}
+        
+        if request.args.get('location'):
+            query['clinic_address'] = {"$regex": request.args.get('location'), "$options": "i"}
+        
+        if request.args.get('consultation_mode'):
+            query['consultation_mode'] = request.args.get('consultation_mode')
+        
+        if request.args.get('language'):
+            query['languages_spoken'] = {"$in": [request.args.get('language')]}
+        
+        if request.args.get('is_accepting_patients') == 'true':
+            query['is_accepting_patients'] = True
+        
+        # Pagination
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        skip = (page - 1) * limit
+        
+        # Sorting
+        sort_by = request.args.get('sort_by', 'created_at')
+        sort_order = -1  # Descending by default
+        
+        if sort_by == 'rating':
+            sort_field = 'rating'
+        elif sort_by == 'experience':
+            sort_field = 'experience_years'
+        elif sort_by == 'fee_low':
+            sort_field = 'consultation_fee'
+            sort_order = 1
+        elif sort_by == 'fee_high':
+            sort_field = 'consultation_fee'
+        else:
+            sort_field = 'created_at'
+        
+        # Get total count
+        total_count = mongo.db.users.count_documents(query)
+        
+        # Fetch doctors with all relevant information
+        doctors = list(mongo.db.users.find(
+            query,
+            {
+                'password': 0  # Exclude password only
+            }
+        ).sort(sort_field, sort_order).skip(skip).limit(limit))
+        
+        # Convert ObjectIds to strings and enrich doctor data
+        patient_id = str(current_user['_id'])
+        formatted_doctors = []
+        
+        for doctor in doctors:
+            # Convert all ObjectId fields to strings
+            doctor['_id'] = str(doctor['_id'])
+            
+            # Convert datetime objects to ISO format strings
+            if 'created_at' in doctor and doctor['created_at']:
+                doctor['created_at'] = doctor['created_at'].isoformat()
+            if 'updated_at' in doctor and doctor['updated_at']:
+                doctor['updated_at'] = doctor['updated_at'].isoformat()
+            if 'last_login' in doctor and doctor['last_login']:
+                doctor['last_login'] = doctor['last_login'].isoformat()
+            
+            # Convert any ObjectIds in arrays (appointments, connected_patients, etc.)
+            if 'appointments' in doctor and doctor['appointments']:
+                doctor['appointments'] = [str(aid) if isinstance(aid, ObjectId) else aid for aid in doctor['appointments']]
+            if 'connected_patients' in doctor and doctor['connected_patients']:
+                doctor['connected_patients'] = [str(pid) if isinstance(pid, ObjectId) else pid for pid in doctor['connected_patients']]
+            if 'pending_connection_requests' in doctor and doctor['pending_connection_requests']:
+                doctor['pending_connection_requests'] = [str(rid) if isinstance(rid, ObjectId) else rid for rid in doctor['pending_connection_requests']]
+            
+            doctor_id = doctor['_id']
+            
+            # Check if already connected or pending
+            existing_connection = mongo.db.connections.find_one({
+                "patient_id": patient_id,
+                "doctor_id": doctor_id,
+                "status": {"$in": ["pending", "active"]}
+            })
+            
+            if existing_connection:
+                doctor['connection_status'] = existing_connection['status']
+                doctor['can_send_request'] = False
+            else:
+                doctor['connection_status'] = 'none'
+                doctor['can_send_request'] = doctor.get('is_accepting_patients', True)
+            
+            # Format doctor data for display
+            doctor['display_info'] = {
+                'basic': {
+                    'name': doctor.get('full_name', 'N/A'),
+                    'specialization': doctor.get('specialization', 'General'),
+                    'qualification': doctor.get('qualification', 'N/A'),
+                    'degree': doctor.get('degree', 'N/A')
+                },
+                'experience': {
+                    'years': doctor.get('experience_years', 0),
+                    'registration_year': doctor.get('registration_year', 'N/A'),
+                    'medical_council': doctor.get('medical_council', 'N/A')
+                },
+                'practice': {
+                    'clinic_name': doctor.get('clinic_name', 'N/A'),
+                    'clinic_address': doctor.get('clinic_address', 'N/A'),
+                    'clinic_phone': doctor.get('clinic_phone', doctor.get('mobile_number', 'N/A')),
+                    'consultation_fee': doctor.get('consultation_fee', 0),
+                    'consultation_mode': doctor.get('consultation_mode', []),
+                    'available_days': doctor.get('available_days', []),
+                    'available_hours': doctor.get('available_hours', 'N/A')
+                },
+                'ratings': {
+                    'rating': round(doctor.get('rating', 0.0), 1),
+                    'total_reviews': doctor.get('total_reviews', 0),
+                    'total_consultations': doctor.get('total_consultations', 0)
+                },
+                'additional': {
+                    'languages_spoken': doctor.get('languages_spoken', []),
+                    'sub_specializations': doctor.get('sub_specializations', []),
+                    'conditions_treated': doctor.get('conditions_treated', []),
+                    'certifications': doctor.get('certifications', []),
+                    'emergency_available': doctor.get('emergency_available', False)
+                }
+            }
+            
+            formatted_doctors.append(doctor)
+        
+        return success_response(
+            f"Found {total_count} doctors",
+            {
+                "doctors": formatted_doctors,
+                "pagination": {
+                    "current_page": page,
+                    "total_pages": (total_count + limit - 1) // limit if total_count > 0 else 0,
+                    "total_count": total_count,
+                    "per_page": limit,
+                    "has_next": skip + limit < total_count,
+                    "has_prev": page > 1
+                },
+                "filters_applied": {
+                    "specialization": request.args.get('specialization'),
+                    "min_experience": request.args.get('min_experience'),
+                    "max_fee": request.args.get('max_fee'),
+                    "min_rating": request.args.get('min_rating'),
+                    "location": request.args.get('location'),
+                    "consultation_mode": request.args.get('consultation_mode'),
+                    "language": request.args.get('language'),
+                    "sort_by": sort_by
+                }
+            }
+        )
+        
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@patient_bp.route('/doctor-details/<doctor_id>', methods=['GET'])
+@token_required
+def get_doctor_details(current_user, doctor_id):
+    """
+    Get detailed information about a specific doctor
+    ---
+    tags:
+      - Patient Profile
+    security:
+      - Bearer: []
+    parameters:
+      - name: doctor_id
+        in: path
+        type: string
+        required: true
+        description: Doctor ID
+    responses:
+      200:
+        description: Detailed doctor information
+    """
+    try:
+        if current_user['role'] != 'patient':
+            return error_response("Access denied. Patient only.", 403)
+        
+        doctor = mongo.db.users.find_one(
+            {
+                "_id": ObjectId(doctor_id),
+                "role": "doctor",
+                "is_active": True,
+                "is_verified": True
+            },
+            {
+                'password': 0,
+                'connected_patients': 0,
+                'pending_connection_requests': 0
+            }
+        )
+        
+        if not doctor:
+            return error_response("Doctor not found or not available", 404)
+        
+        # Convert ObjectId to string
+        doctor['_id'] = str(doctor['_id'])
+        
+        # Convert datetime objects to ISO format strings
+        if 'created_at' in doctor and doctor['created_at']:
+            doctor['created_at'] = doctor['created_at'].isoformat()
+        if 'updated_at' in doctor and doctor['updated_at']:
+            doctor['updated_at'] = doctor['updated_at'].isoformat()
+        if 'last_login' in doctor and doctor['last_login']:
+            doctor['last_login'] = doctor['last_login'].isoformat()
+        
+        # Check connection status
+        patient_id = str(current_user['_id'])
+        existing_connection = mongo.db.connections.find_one({
+            "patient_id": patient_id,
+            "doctor_id": doctor_id,
+            "status": {"$in": ["pending", "active"]}
+        })
+        
+        if existing_connection:
+            doctor['connection_status'] = existing_connection['status']
+            doctor['connection_id'] = str(existing_connection['_id'])
+            doctor['can_send_request'] = False
+        else:
+            doctor['connection_status'] = 'none'
+            doctor['can_send_request'] = doctor.get('is_accepting_patients', True)
+        
+        # Calculate availability percentage
+        available_days = doctor.get('available_days', [])
+        availability_percentage = (len(available_days) / 7) * 100 if available_days else 0
+        
+        return success_response(
+            "Doctor details retrieved",
+            {
+                "doctor": doctor,
+                "availability_percentage": round(availability_percentage, 1),
+                "recommendation": _get_match_recommendation(current_user, doctor)
+            }
+        )
+        
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+def _get_match_recommendation(patient, doctor):
+    """Helper function to provide match recommendation"""
+    match_score = 0
+    reasons = []
+    
+    # Check if doctor treats patient's chronic conditions
+    patient_conditions = patient.get('chronic_conditions', [])
+    doctor_conditions = doctor.get('conditions_treated', [])
+    
+    if patient_conditions and doctor_conditions:
+        matching_conditions = set(patient_conditions) & set(doctor_conditions)
+        if matching_conditions:
+            match_score += 30
+            reasons.append(f"Specializes in treating: {', '.join(matching_conditions)}")
+    
+    # Check rating
+    rating = doctor.get('rating', 0)
+    if rating >= 4.5:
+        match_score += 25
+        reasons.append(f"Highly rated ({rating}/5)")
+    elif rating >= 4.0:
+        match_score += 15
+        reasons.append(f"Well rated ({rating}/5)")
+    
+    # Check experience
+    experience = doctor.get('experience_years', 0)
+    if experience >= 10:
+        match_score += 20
+        reasons.append(f"{experience} years of experience")
+    elif experience >= 5:
+        match_score += 10
+        reasons.append(f"{experience} years of experience")
+    
+    # Check consultation modes
+    consultation_modes = doctor.get('consultation_mode', [])
+    if 'video' in consultation_modes:
+        match_score += 10
+        reasons.append("Offers video consultations")
+    
+    # Check if elderly patient and doctor has relevant experience
+    if patient.get('is_elderly') and 'Geriatrics' in doctor.get('sub_specializations', []):
+        match_score += 15
+        reasons.append("Experienced with elderly care")
+    
+    return {
+        "match_score": min(match_score, 100),
+        "reasons": reasons,
+        "recommendation_level": "Highly Recommended" if match_score >= 70 else "Recommended" if match_score >= 50 else "Available"
+    }
