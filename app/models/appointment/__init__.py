@@ -1,0 +1,1 @@
+from .appointment_model import Appointment

@@ -110,9 +110,20 @@ def register():
         
         result = mongo.db.users.insert_one(doctor.to_dict())
         
+        # Generate JWT token
+        token_payload = {
+            'user_id': str(result.inserted_id),
+            'email': email,
+            'role': 'doctor',
+            'exp': datetime.utcnow() + timedelta(hours=Config.JWT_EXPIRATION_HOURS)
+        }
+        
+        token = jwt.encode(token_payload, Config.JWT_SECRET_KEY, algorithm='HS256')
+        
         return success_response(
             "Doctor registered successfully. Please complete your profile.",
             {
+                "token": token,
                 "doctor_id": str(result.inserted_id),
                 "email": email,
                 "full_name": doctor.full_name,

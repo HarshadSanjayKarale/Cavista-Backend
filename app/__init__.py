@@ -80,6 +80,10 @@ def create_app(config_class=Config):
     from app.routes.connection.connection_routes import connection_bp
     app.register_blueprint(connection_bp, url_prefix='/api/connection')
     
+    # Register blueprints - Appointment Routes
+    from app.routes.appointment.appointment_routes import appointment_bp
+    app.register_blueprint(appointment_bp, url_prefix='/api/appointment')
+    
     @app.route('/', methods=['GET'])
     def health_check():
         """
@@ -104,7 +108,8 @@ def create_app(config_class=Config):
             "endpoints": {
                 "patient": "/api/patient",
                 "doctor": "/api/doctor",
-                "connection": "/api/connection"
+                "connection": "/api/connection",
+                "appointment": "/api/appointment"
             },
             "features": [
                 "Patient-Doctor Connection Management",
