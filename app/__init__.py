@@ -104,6 +104,10 @@ def create_app(config_class=Config):
     from app.routes.food.food_routes import food_bp
     app.register_blueprint(food_bp, url_prefix='/api/food')
     
+    # Register blueprints - Risk Assessment Routes
+    from app.routes.risk.risk_routes import risk_bp
+    app.register_blueprint(risk_bp, url_prefix='/api/risk')
+    
     @app.route('/', methods=['GET'])
     def health_check():
         """
@@ -132,12 +136,14 @@ def create_app(config_class=Config):
                 "appointment": "/api/appointment",
                 "notification": "/api/notification",
                 "wearable": "/api/wearable",
-                "food": "/api/food"
+                "food": "/api/food",
+                "risk": "/api/risk"
             },
             "features": [
                 "Patient-Doctor Connection Management",
                 "Wearable Integration",
                 "AI-Powered Health Analytics",
+                "ML-Based Risk Prediction",
                 "Medication Reminders",
                 "Fall Detection (Elderly Care)",
                 "Virtual Health Assistant",
