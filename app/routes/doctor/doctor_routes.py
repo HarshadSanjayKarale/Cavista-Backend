@@ -11,6 +11,17 @@ from bson import ObjectId
 
 doctor_bp = Blueprint('doctor', __name__)
 
+# Helper function to convert ObjectId to string recursively
+def convert_objectid(obj):
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_objectid(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_objectid(item) for item in obj]
+    else:
+        return obj
+
 @doctor_bp.route('/register', methods=['POST'])
 def register():
     """
@@ -327,15 +338,7 @@ def complete_profile(current_user, doctor_id):
         )
         
         if result.modified_count > 0:
-            return success_response(
-                "Profile completed successfully. Awaiting verification.",
-                {
-                    "doctor_id": doctor_id,
-                    "is_profile_complete": True,
-                    "is_verified": False,
-                    "message": "Your profile is under review by our team. You will be notified once verified."
-                }
-            )
+            return success_response("Profile completed successfully. Awaiting verification.", {"doctor_id": doctor_id})
         return error_response("No changes made", 400)
         
     except Exception as e:
@@ -375,17 +378,6 @@ def get_profile(current_user, doctor_id):
         if not user:
             return error_response("Doctor not found", 404)
         
-        # Helper function to convert ObjectId to string recursively
-        def convert_objectid(obj):
-            if isinstance(obj, ObjectId):
-                return str(obj)
-            elif isinstance(obj, dict):
-                return {key: convert_objectid(value) for key, value in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_objectid(item) for item in obj]
-            else:
-                return obj
-        
         # Convert all ObjectIds in user document
         user = convert_objectid(user)
         
@@ -408,14 +400,10 @@ def get_profile(current_user, doctor_id):
                 "consultation_fee": user.get('consultation_fee'),
                 "available_days": user.get('available_days', []),
                 "available_hours": user.get('available_hours'),
-                
-                # Required profile fields
                 "mobile_number": user.get('mobile_number'),
                 "degree": user.get('degree'),
                 "degree_college": user.get('degree_college'),
                 "clinic_address": user.get('clinic_address'),
-                
-                # Additional details
                 "clinic_name": user.get('clinic_name'),
                 "clinic_phone": user.get('clinic_phone'),
                 "consultation_mode": user.get('consultation_mode', []),
@@ -423,19 +411,14 @@ def get_profile(current_user, doctor_id):
                 "registration_year": user.get('registration_year'),
                 "medical_council": user.get('medical_council'),
                 "certifications": user.get('certifications', []),
-                
-                # Stats
                 "rating": user.get('rating', 0.0),
                 "total_reviews": user.get('total_reviews', 0),
                 "total_consultations": user.get('total_consultations', 0),
                 "connected_patients_count": len(connected_patients) if isinstance(connected_patients, list) else 0,
                 "pending_requests_count": len(pending_requests) if isinstance(pending_requests, list) else 0,
-                
-                # Status
                 "is_verified": user.get('is_verified', False),
                 "is_profile_complete": user.get('is_profile_complete', False),
                 "is_accepting_patients": user.get('is_accepting_patients', True),
-                
                 "appointments": appointments,
                 "connected_patients": connected_patients,
                 "pending_connection_requests": pending_requests
@@ -592,7 +575,7 @@ def change_password(current_user, doctor_id):
             return error_response("Missing old_password or new_password", 400)
         
         if not bcrypt.checkpw(data['old_password'].encode('utf-8'), current_user['password']):
-            return error_response("Invalid old password", 401)
+            return error_response("Incorrect old password", 401)
         
         new_password = data['new_password']
         if len(new_password) < 6:
@@ -691,8 +674,8 @@ def search_doctors():
             'pending_connection_requests': 0
         }).limit(50))
         
-        for doctor in doctors:
-            doctor['_id'] = str(doctor['_id'])
+        # Convert all ObjectIds to strings
+        doctors = convert_objectid(doctors)
         
         return success_response(
             f"Found {len(doctors)} doctors",
