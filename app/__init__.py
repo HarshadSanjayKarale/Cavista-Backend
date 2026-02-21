@@ -49,8 +49,8 @@ def create_app(config_class=Config):
     swagger_template = {
         "swagger": "2.0",
         "info": {
-            "title": "Cavista Hackathon 2026 API",
-            "description": "Interactive Authentication API with JWT",
+            "title": "Cavista Hackathon 2026 - Healthcare API",
+            "description": "Separate APIs for Patients and Doctors with JWT Authentication",
             "version": "1.0.0"
         },
         "host": "localhost:5000",
@@ -68,9 +68,13 @@ def create_app(config_class=Config):
     
     Swagger(app, config=swagger_config, template=swagger_template)
     
-    # Register blueprints
-    from app.routes.auth_routes import auth_bp
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    # Register blueprints - Patient Routes
+    from app.routes.patient.patient_routes import patient_bp
+    app.register_blueprint(patient_bp, url_prefix='/api/patient')
+    
+    # Register blueprints - Doctor Routes
+    from app.routes.doctor.doctor_routes import doctor_bp
+    app.register_blueprint(doctor_bp, url_prefix='/api/doctor')
     
     @app.route('/', methods=['GET'])
     def health_check():
@@ -83,7 +87,6 @@ def create_app(config_class=Config):
           200:
             description: API is running
         """
-        # Check MongoDB connection
         mongo_status = "connected"
         try:
             mongo.cx.admin.command('ping')
@@ -91,12 +94,15 @@ def create_app(config_class=Config):
             mongo_status = "disconnected"
         
         return jsonify({
-            "message": "API is running",
+            "message": "Healthcare API is running",
             "docs": "/apidocs",
-            "mongodb": mongo_status
+            "mongodb": mongo_status,
+            "endpoints": {
+                "patient": "/api/patient",
+                "doctor": "/api/doctor"
+            }
         }), 200
     
-    # Error handler for MongoDB connection issues
     @app.errorhandler(Exception)
     def handle_exception(e):
         if "NoneType" in str(e) or "mongo" in str(e).lower():

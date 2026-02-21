@@ -10,9 +10,9 @@ def init_mongo(app):
         with app.app_context():
             # Ping the database
             mongo.cx.admin.command('ping')
-            print("✅ MongoDB Connected Successfully!")
+            print("MongoDB Connected Successfully!")
         return True
     except Exception as e:
-        print(f"❌ MongoDB Connection Failed: {e}")
+        print(f"MongoDB Connection Failed: {e}")
         print("Please ensure MongoDB is running: net start MongoDB")
         return False
