@@ -95,7 +95,6 @@ def register():
         
         result = mongo.db.users.insert_one(patient.to_dict())
         
-        # Generate JWT token
         token_payload = {
             'user_id': str(result.inserted_id),
             'email': email,
@@ -279,18 +278,17 @@ def complete_profile(current_user, patient_id):
         if current_user['role'] != 'patient':
             return error_response("Access denied. Patient only.", 403)
         
-        # Verify patient_id matches current user
         if str(current_user['_id']) != patient_id:
             return error_response("You can only update your own profile", 403)
         
         data = request.get_json()
         
-        # Validate required fields
+        
         required_fields = ['age', 'weight', 'diet_type', 'workout_level']
         if not all(field in data for field in required_fields):
             return error_response("Missing required fields: age, weight, diet_type, workout_level", 400)
         
-        # Validate enums
+        
         valid_diet_types = ['veg', 'nonveg', 'vegan']
         valid_workout_levels = ['Beginner', 'Intermediate', 'Advanced']
         
@@ -300,7 +298,7 @@ def complete_profile(current_user, patient_id):
         if data['workout_level'] not in valid_workout_levels:
             return error_response(f"Invalid workout_level. Must be one of: {', '.join(valid_workout_levels)}", 400)
         
-        # Prepare update data
+        
         update_data = {
             'age': int(data['age']),
             'weight': float(data['weight']),
@@ -311,7 +309,7 @@ def complete_profile(current_user, patient_id):
             'updated_at': datetime.utcnow()
         }
         
-        # Optional fields
+        
         if 'chronic_conditions' in data:
             update_data['chronic_conditions'] = data['chronic_conditions']
         if 'allergies' in data:
@@ -323,7 +321,7 @@ def complete_profile(current_user, patient_id):
         if 'alcohol_consumption' in data:
             update_data['alcohol_consumption'] = data['alcohol_consumption']
         
-        # Check if elderly (age > 60)
+        
         if int(data['age']) > 60:
             update_data['is_elderly'] = True
             update_data['fall_detection_enabled'] = True
@@ -373,7 +371,7 @@ def get_profile(current_user, patient_id):
         if current_user['role'] != 'patient':
             return error_response("Access denied. Patient only.", 403)
         
-        # Verify patient_id matches current user
+        
         if str(current_user['_id']) != patient_id:
             return error_response("You can only view your own profile", 403)
         
@@ -382,7 +380,7 @@ def get_profile(current_user, patient_id):
         if not user:
             return error_response("Patient not found", 404)
         
-        # Calculate BMI if height and weight are available
+        
         bmi = None
         if user.get('height') and user.get('weight'):
             height_m = user['height'] / 100
@@ -505,7 +503,7 @@ def update_profile(current_user, patient_id):
         if current_user['role'] != 'patient':
             return error_response("Access denied. Patient only.", 403)
         
-        # Verify patient_id matches current user
+        
         if str(current_user['_id']) != patient_id:
             return error_response("You can only update your own profile", 403)
         
@@ -579,7 +577,7 @@ def change_password(current_user, patient_id):
         if current_user['role'] != 'patient':
             return error_response("Access denied. Patient only.", 403)
         
-        # Verify patient_id matches current user
+        
         if str(current_user['_id']) != patient_id:
             return error_response("You can only change your own password", 403)
         
@@ -694,16 +692,12 @@ def browse_doctors(current_user):
         if current_user['role'] != 'patient':
             return error_response("Access denied. Patient only.", 403)
         
-        # Build query - simplified to just show doctors with role="doctor"
+        
         query = {
             "role": "doctor"
         }
         
-        # Optional: only show active doctors if the field exists
-        # Remove or comment these filters if you want to see all doctors
-        # query["is_active"] = {"$ne": False}  # Show if is_active is True or doesn't exist
         
-        # Apply filters
         if request.args.get('specialization'):
             query['specialization'] = {"$regex": request.args.get('specialization'), "$options": "i"}
         
@@ -728,14 +722,14 @@ def browse_doctors(current_user):
         if request.args.get('is_accepting_patients') == 'true':
             query['is_accepting_patients'] = True
         
-        # Pagination
+        
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 20))
         skip = (page - 1) * limit
         
-        # Sorting
+        
         sort_by = request.args.get('sort_by', 'created_at')
-        sort_order = -1  # Descending by default
+        sort_order = -1  
         
         if sort_by == 'rating':
             sort_field = 'rating'
@@ -749,26 +743,26 @@ def browse_doctors(current_user):
         else:
             sort_field = 'created_at'
         
-        # Get total count
+        
         total_count = mongo.db.users.count_documents(query)
         
-        # Fetch doctors with all relevant information
+        
         doctors = list(mongo.db.users.find(
             query,
             {
-                'password': 0  # Exclude password only
+                'password': 0 
             }
         ).sort(sort_field, sort_order).skip(skip).limit(limit))
         
-        # Convert ObjectIds to strings and enrich doctor data
+        
         patient_id = str(current_user['_id'])
         formatted_doctors = []
         
         for doctor in doctors:
-            # Convert all ObjectId fields to strings
+            
             doctor['_id'] = str(doctor['_id'])
             
-            # Convert datetime objects to ISO format strings
+            
             if 'created_at' in doctor and doctor['created_at']:
                 doctor['created_at'] = doctor['created_at'].isoformat()
             if 'updated_at' in doctor and doctor['updated_at']:
@@ -776,7 +770,7 @@ def browse_doctors(current_user):
             if 'last_login' in doctor and doctor['last_login']:
                 doctor['last_login'] = doctor['last_login'].isoformat()
             
-            # Convert any ObjectIds in arrays (appointments, connected_patients, etc.)
+            
             if 'appointments' in doctor and doctor['appointments']:
                 doctor['appointments'] = [str(aid) if isinstance(aid, ObjectId) else aid for aid in doctor['appointments']]
             if 'connected_patients' in doctor and doctor['connected_patients']:
@@ -786,7 +780,7 @@ def browse_doctors(current_user):
             
             doctor_id = doctor['_id']
             
-            # Check if already connected or pending
+            
             existing_connection = mongo.db.connections.find_one({
                 "patient_id": patient_id,
                 "doctor_id": doctor_id,
@@ -800,7 +794,7 @@ def browse_doctors(current_user):
                 doctor['connection_status'] = 'none'
                 doctor['can_send_request'] = doctor.get('is_accepting_patients', True)
             
-            # Format doctor data for display
+            
             doctor['display_info'] = {
                 'basic': {
                     'name': doctor.get('full_name', 'N/A'),

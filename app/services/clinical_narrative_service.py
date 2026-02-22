@@ -14,7 +14,6 @@ class ClinicalNarrativeAgent:
     """Agent 1: Risk Interpreter - Generates clinical narratives from risk data"""
     
     def __init__(self):
-        # Initialize Gemini LLM with the correct model name
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-3-flash-preview",  # Updated to latest Gemini model
             google_api_key=os.getenv('GEMINI_API_KEY'),
@@ -22,7 +21,6 @@ class ClinicalNarrativeAgent:
             convert_system_message_to_human=True
         )
         
-        # Comprehensive prompt for clinical narrative generation
         self.prompt_template = """You are an experienced clinical health analyst interpreting health risk assessment data.
 
 **PATIENT ID:** {user_id}
@@ -30,7 +28,6 @@ class ClinicalNarrativeAgent:
 **RISK ASSESSMENT DATA:**
 {risk_data}
 
-**YOUR TASK:**
 Generate a comprehensive, professional clinical narrative that:
 
 1. **Risk Overview**: Start with the overall risk classification and probability in clear terms
@@ -92,7 +89,7 @@ Generate a comprehensive clinical narrative now:"""
             return narrative
             
         except Exception as e:
-            print(f"❌ Error generating narrative: {str(e)}")
+            print(f"Error generating narrative: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
@@ -100,14 +97,12 @@ Generate a comprehensive clinical narrative now:"""
     def _format_risk_data(self, data: dict) -> str:
         """Format risk assessment data for LLM consumption"""
         
-        # Extract key components
         risk_assessment = data.get('risk_assessment', {})
         health_metrics = data.get('health_metrics', {})
         derived_scores = data.get('derived_scores', {})
         risk_factors = data.get('risk_factors', {})
         recommendations = data.get('recommendations', [])
         
-        # Format as structured text
         formatted = f"""
 ## OVERALL RISK ASSESSMENT
 - Risk Class: {risk_assessment.get('risk_class', 'N/A')}
@@ -131,8 +126,7 @@ Generate a comprehensive clinical narrative now:"""
 
 ## TOP RISK CONTRIBUTING FACTORS (SHAP Analysis)
 """
-        
-        # Add top contributing factors
+
         top_factors = risk_factors.get('top_contributing_factors', [])
         for i, factor in enumerate(top_factors, 1):
             impact = factor.get('impact', 'Unknown')
@@ -140,7 +134,6 @@ Generate a comprehensive clinical narrative now:"""
             feature = factor.get('feature', 'Unknown')
             formatted += f"{i}. {feature}: {contribution:+.4f} ({impact})\n"
         
-        # Add recommendations if available
         if recommendations:
             formatted += "\n## INITIAL RECOMMENDATIONS FROM MODEL\n"
             for i, rec in enumerate(recommendations[:3], 1):
@@ -155,9 +148,9 @@ class ClinicalNarrativeService:
     def __init__(self):
         try:
             self.risk_interpreter = ClinicalNarrativeAgent()
-            print("✅ Clinical Narrative Agent initialized successfully (Gemini 2.0 Flash)")
+            print("Clinical Narrative Agent initialized successfully (Gemini 2.0 Flash)")
         except Exception as e:
-            print(f"⚠️  Warning: Clinical Narrative Agent could not be initialized: {e}")
+            print(f"Warning: Clinical Narrative Agent could not be initialized: {e}")
             self.risk_interpreter = None
     
     def generate_comprehensive_report(self, user_id: str, risk_assessment_data: dict) -> dict:
@@ -175,13 +168,11 @@ class ClinicalNarrativeService:
             raise RuntimeError("Clinical Narrative Agent is not initialized. Check GEMINI_API_KEY in .env")
         
         try:
-            # Generate clinical narrative
             clinical_narrative = self.risk_interpreter.generate_narrative(
                 user_id=user_id,
                 risk_assessment_data=risk_assessment_data
             )
             
-            # Combine with original data
             report = {
                 'user_id': user_id,
                 'clinical_narrative': clinical_narrative,
@@ -197,7 +188,7 @@ class ClinicalNarrativeService:
             return report
             
         except Exception as e:
-            print(f"❌ Error generating clinical report: {str(e)}")
+            print(f"Error generating clinical report: {str(e)}")
             import traceback
             traceback.print_exc()
             raise

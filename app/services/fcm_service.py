@@ -34,22 +34,22 @@ class FCMService:
         if not FCMService._initialized:
             try:
                 firebase_admin.get_app()
-                print("✅ Firebase Admin SDK already initialized")
+                print("Firebase Admin SDK already initialized")
             except ValueError:
                 service_account_path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
 
                 if service_account_path and os.path.exists(service_account_path):
                     cred = credentials.Certificate(service_account_path)
                     firebase_admin.initialize_app(cred)
-                    print(f"✅ Firebase Admin SDK initialized from file: {service_account_path}")
+                    print(f"Firebase Admin SDK initialized from file: {service_account_path}")
                 else:
                     try:
                         cred = credentials.ApplicationDefault()
                         firebase_admin.initialize_app(cred)
-                        print("✅ Firebase Admin SDK initialized with default credentials")
+                        print("Firebase Admin SDK initialized with default credentials")
                     except Exception as e:
-                        print(f"⚠️  Firebase Admin SDK not initialized: {e}")
-                        print("ℹ️  Set FIREBASE_SERVICE_ACCOUNT_PATH env variable to enable FCM.")
+                        print(f"Firebase Admin SDK not initialized: {e}")
+                        print(" Set FIREBASE_SERVICE_ACCOUNT_PATH env variable to enable FCM.")
 
             FCMService._initialized = True
 
@@ -183,14 +183,14 @@ class FCMService:
             )
 
             response = messaging.send_multicast(message)
-            print(f"✅ FCM multicast → success={response.success_count}, fail={response.failure_count}")
+            print(f"FCM multicast → success={response.success_count}, fail={response.failure_count}")
             return {
                 'success_count': response.success_count,
                 'failure_count': response.failure_count,
             }
 
         except Exception as e:
-            print(f"❌ FCM multicast error: {e}")
+            print(f"FCM multicast error: {e}")
             return {'success_count': 0, 'failure_count': len(fcm_tokens or [])}
 
     # ------------------------------------------------------------------
@@ -238,11 +238,11 @@ class FCMService:
             )
 
             response = messaging.send(message)
-            print(f"✅ FCM topic '{topic}' → {response}")
+            print(f"FCM topic '{topic}' → {response}")
             return True
 
         except Exception as e:
-            print(f"❌ FCM topic error: {e}")
+            print(f"FCM topic error: {e}")
             return False
 
 

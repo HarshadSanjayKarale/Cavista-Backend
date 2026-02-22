@@ -289,20 +289,16 @@ Generate the personalized diet plan now in the EXACT table format shown above:""
         
         for line in lines:
             line = line.strip()
-            # Look for bullet points or numbered recommendations
             if line and (line.startswith('-') or line.startswith('•') or line.startswith('*')):
                 in_recommendations = True
-                # Remove bullet markers and clean up
                 note = line.lstrip('-•* ').strip()
                 if note and len(note) > 10:  # Filter out very short lines
                     notes.append(note)
             elif in_recommendations and line and line[0].isdigit() and '.' in line[:3]:
-                # Handle numbered lists like "1. "
                 note = line.split('.', 1)[1].strip()
                 if note and len(note) > 10:
                     notes.append(note)
         
-        # If no notes extracted, provide defaults
         if not notes:
             notes = [
                 'Drink 8-10 glasses of water throughout the day',
@@ -320,9 +316,9 @@ class DietRecommendationService:
     def __init__(self):
         try:
             self.diet_agent = DietRecommendationAgent()
-            print("✅ Diet Recommendation Agent initialized successfully")
+            print("Diet Recommendation Agent initialized successfully")
         except Exception as e:
-            print(f"⚠️  Warning: Diet Recommendation Agent initialization failed: {e}")
+            print(f"Warning: Diet Recommendation Agent initialization failed: {e}")
             self.diet_agent = None
     
     def get_personalized_diet_plan(self, user_id: str, risk_assessment_data: dict, assessment_date: str) -> dict:
@@ -343,5 +339,4 @@ class DietRecommendationService:
         return self.diet_agent.generate_diet_plan(user_id, risk_assessment_data, assessment_date)
 
 
-# Singleton instance
 diet_recommendation_service = DietRecommendationService()

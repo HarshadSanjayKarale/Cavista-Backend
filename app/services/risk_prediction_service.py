@@ -12,7 +12,6 @@ class RiskPredictionService:
     """Service for health risk prediction using ML model"""
     
     def __init__(self):
-        # Load the model
         model_path = Path(__file__).parent.parent.parent / "fitness_risk_engine_model.pkl"
         try:
             model_package = joblib.load(model_path)
@@ -20,26 +19,23 @@ class RiskPredictionService:
             self.explainer = model_package['explainer']
             self.features = model_package['features']
             self.version = model_package.get('version', 'N/A')
-            print(f"✅ Risk model loaded successfully (version: {self.version})")
+            print(f"Risk model loaded successfully (version: {self.version})")
         except Exception as e:
-            print(f"❌ Error loading risk model: {e}")
+            print(f"Error loading risk model: {e}")
             raise
     
     def compute_derived_features(self, df):
         """Compute derived features exactly as in training"""
         df = df.copy()
-        
-        # Constants (same as training)
+
         height_m = 1.70
         age_assumed = 38
         stride_m = 0.75
-        
-        # Convert all columns to float to avoid type issues
+
         numeric_cols = ['steps', 'calories', 'distance_km', 'sleep_hrs', 'active_min', 'heart_rate', 'bmi']
         for col in numeric_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(float)
         
-        # Derived calculations
         weight_kg = df['bmi'] * (height_m ** 2)
         active_hrs = df['active_min'] / 60.0
         speed_kmh = np.where(active_hrs > 0.05, df['distance_km'] / active_hrs, 4.0)
@@ -80,8 +76,7 @@ class RiskPredictionService:
                              10 * np.where(active_hrs > 0, df['distance_km'] / active_hrs, 0) -
                              0.2 * df['heart_rate'] +
                              18)
-        
-        # Fix the diabetic_csr calculation - convert booleans to integers properly
+
         bmi_factor = (df['bmi'] > 30).astype(int)
         steps_factor = (df['steps'] < 5000).astype(int)
         hr_factor = (df['heart_rate'] > 80).astype(int)
@@ -103,13 +98,11 @@ class RiskPredictionService:
     
     def prepare_data_from_db(self, user_id):
         """Fetch and prepare user data from database"""
-        # Get latest data point for user
         latest_data = WearableData.get_latest_data(user_id)
         
         if not latest_data:
             raise ValueError(f"No wearable data found for user {user_id}")
         
-        # Convert to DataFrame with correct column names
         data_dict = {
             'user_id': [user_id],
             'steps': [float(latest_data.get('steps', 0))],
@@ -140,34 +133,27 @@ class RiskPredictionService:
         Returns comprehensive risk assessment
         """
         try:
-            # 1. Fetch user data from database
             df = self.prepare_data_from_db(user_id)
             
-            # 2. Compute derived features
             df_enriched = self.compute_derived_features(df)
             
-            # 3. Prepare features for model - ensure all are float type
             X = df_enriched[self.features].astype(float)
             
-            # 4. Predict risk
             risk_prob = float(self.model.predict(X)[0])
             risk_class = self.get_risk_class(risk_prob)
             
-            # 5. Get SHAP values for explainability
             shap_values = self.explainer.shap_values(X)
             shap_dict = {
                 feat: float(val) 
                 for feat, val in zip(self.features, shap_values[0])
             }
             
-            # Sort by absolute contribution
             top_factors = sorted(
                 shap_dict.items(), 
                 key=lambda x: abs(x[1]), 
                 reverse=True
             )[:5]
             
-            # 6. Build comprehensive response
             result = {
                 'user_id': user_id,
                 'risk_assessment': {
@@ -208,7 +194,7 @@ class RiskPredictionService:
             return result
             
         except Exception as e:
-            print(f"❌ Error in predict_risk: {str(e)}")
+            print(f"Error in predict_risk: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
@@ -219,7 +205,6 @@ class RiskPredictionService:
         
         row = df.iloc[0]
         
-        # Step-based recommendations
         if row['steps'] < 5000:
             recommendations.append({
                 'category': 'Physical Activity',
@@ -227,8 +212,7 @@ class RiskPredictionService:
                 'message': 'Your daily step count is low. Aim for at least 10,000 steps per day.',
                 'action': 'Increase daily walking or add a 30-minute walk to your routine.'
             })
-        
-        # Sleep recommendations
+
         if row['sleep_hrs'] < 6:
             recommendations.append({
                 'category': 'Sleep',
@@ -237,7 +221,6 @@ class RiskPredictionService:
                 'action': 'Establish a consistent sleep schedule and avoid screens before bed.'
             })
         
-        # BMI recommendations
         if row['bmi'] > 30:
             recommendations.append({
                 'category': 'Body Composition',
@@ -252,8 +235,7 @@ class RiskPredictionService:
                 'message': 'BMI indicates overweight. Small lifestyle changes can help.',
                 'action': 'Focus on balanced nutrition and regular exercise.'
             })
-        
-        # Heart rate recommendations
+
         if row['heart_rate'] > 80:
             recommendations.append({
                 'category': 'Cardiovascular',
@@ -261,8 +243,7 @@ class RiskPredictionService:
                 'message': 'Elevated resting heart rate detected.',
                 'action': 'Incorporate cardio exercises and stress management techniques.'
             })
-        
-        # Active minutes
+
         if row['active_min'] < 30:
             recommendations.append({
                 'category': 'Physical Activity',
@@ -270,8 +251,7 @@ class RiskPredictionService:
                 'message': 'Low active minutes. WHO recommends 150 minutes/week.',
                 'action': 'Add moderate-intensity exercise like brisk walking or cycling.'
             })
-        
-        # General recommendation based on risk class
+
         if risk_class == 'Critical':
             recommendations.insert(0, {
                 'category': 'Urgent',
@@ -289,5 +269,4 @@ class RiskPredictionService:
         
         return recommendations
 
-# Singleton instance
 risk_service = RiskPredictionService()

@@ -9,15 +9,13 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
-    # Initialize Flask-Session (for Google Fit OAuth)
     Session(app)
     
-    # Initialize MongoDB
     mongo_connected = init_mongo(app)
     
     if not mongo_connected:
         print("\n" + "="*60)
-        print("⚠️  WARNING: MongoDB is not connected!")
+        print(" WARNING: MongoDB is not connected!")
         print("="*60)
         print("Quick Fix:")
         print("1. Start MongoDB: net start MongoDB")
@@ -72,51 +70,46 @@ def create_app(config_class=Config):
     
     Swagger(app, config=swagger_config, template=swagger_template)
     
-    # Register blueprints - Patient Routes
     from app.routes.patient.patient_routes import patient_bp
     app.register_blueprint(patient_bp, url_prefix='/api/patient')
-    
-    # Register blueprints - Doctor Routes
+
     from app.routes.doctor.doctor_routes import doctor_bp
     app.register_blueprint(doctor_bp, url_prefix='/api/doctor')
     
-    # Register blueprints - Connection Routes
     from app.routes.connection.connection_routes import connection_bp
     app.register_blueprint(connection_bp, url_prefix='/api/connection')
     
-    # Register blueprints - Appointment Routes
     from app.routes.appointment.appointment_routes import appointment_bp
     app.register_blueprint(appointment_bp, url_prefix='/api/appointment')
     
-    # Register blueprints - Notification Routes
     from app.routes.notification.notification_routes import notification_bp
     app.register_blueprint(notification_bp, url_prefix='/api/notification')
     
-    # Register blueprints - Wearable Routes
+    
     from app.routes.wearable.wearable_routes import wearable_bp
     app.register_blueprint(wearable_bp, url_prefix='/api/wearable')
     
-    # Register blueprints - Mock Wearable Routes (for testing)
+    
     from app.routes.wearable.mock_routes import mock_bp
     app.register_blueprint(mock_bp, url_prefix='/api/mock/wearable')
     
-    # Register blueprints - Food Recognition Routes
+    
     from app.routes.food.food_routes import food_bp
     app.register_blueprint(food_bp, url_prefix='/api/food')
     
-    # Register blueprints - Risk Assessment Routes
+    
     from app.routes.risk.risk_routes import risk_bp
     app.register_blueprint(risk_bp, url_prefix='/api/risk')
     
-    # Register blueprints - Clinical Narrative Routes (Multi-Agent LLM)
+    
     from app.routes.risk.clinical_narrative_routes import clinical_bp
     app.register_blueprint(clinical_bp, url_prefix='/api/clinical')
     
-    # Register blueprints - Diet Recommendation Routes
+    
     from app.routes.diet.diet_routes import diet_bp
     app.register_blueprint(diet_bp, url_prefix='/api/diet')
     
-    # Register blueprints - Medication Routes
+    
     from app.routes.medication.medication_routes import medication_bp
     app.register_blueprint(medication_bp, url_prefix='/api/medication')
     
