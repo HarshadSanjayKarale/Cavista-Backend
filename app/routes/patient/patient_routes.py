@@ -902,10 +902,10 @@ def get_doctor_details(current_user, doctor_id):
         if not doctor:
             return error_response("Doctor not found or not available", 404)
         
-        # Convert ObjectId to string
+        
         doctor['_id'] = str(doctor['_id'])
         
-        # Convert datetime objects to ISO format strings
+        
         if 'created_at' in doctor and doctor['created_at']:
             doctor['created_at'] = doctor['created_at'].isoformat()
         if 'updated_at' in doctor and doctor['updated_at']:
@@ -913,7 +913,7 @@ def get_doctor_details(current_user, doctor_id):
         if 'last_login' in doctor and doctor['last_login']:
             doctor['last_login'] = doctor['last_login'].isoformat()
         
-        # Check connection status
+        
         patient_id = str(current_user['_id'])
         existing_connection = mongo.db.connections.find_one({
             "patient_id": patient_id,
@@ -929,7 +929,7 @@ def get_doctor_details(current_user, doctor_id):
             doctor['connection_status'] = 'none'
             doctor['can_send_request'] = doctor.get('is_accepting_patients', True)
         
-        # Calculate availability percentage
+        
         available_days = doctor.get('available_days', [])
         availability_percentage = (len(available_days) / 7) * 100 if available_days else 0
         
@@ -951,7 +951,7 @@ def _get_match_recommendation(patient, doctor):
     match_score = 0
     reasons = []
     
-    # Check if doctor treats patient's chronic conditions
+    
     patient_conditions = patient.get('chronic_conditions', [])
     doctor_conditions = doctor.get('conditions_treated', [])
     
@@ -961,7 +961,7 @@ def _get_match_recommendation(patient, doctor):
             match_score += 30
             reasons.append(f"Specializes in treating: {', '.join(matching_conditions)}")
     
-    # Check rating
+    
     rating = doctor.get('rating', 0)
     if rating >= 4.5:
         match_score += 25
@@ -970,7 +970,7 @@ def _get_match_recommendation(patient, doctor):
         match_score += 15
         reasons.append(f"Well rated ({rating}/5)")
     
-    # Check experience
+    
     experience = doctor.get('experience_years', 0)
     if experience >= 10:
         match_score += 20
@@ -979,13 +979,13 @@ def _get_match_recommendation(patient, doctor):
         match_score += 10
         reasons.append(f"{experience} years of experience")
     
-    # Check consultation modes
+    
     consultation_modes = doctor.get('consultation_mode', [])
     if 'video' in consultation_modes:
         match_score += 10
         reasons.append("Offers video consultations")
     
-    # Check if elderly patient and doctor has relevant experience
+    
     if patient.get('is_elderly') and 'Geriatrics' in doctor.get('sub_specializations', []):
         match_score += 15
         reasons.append("Experienced with elderly care")
